@@ -1,0 +1,20 @@
+---
+- hosts: localhost
+  tasks:
+  - name: Save ansible timestamp
+    copy:
+      src: "files/ansible_timestamp"
+      dest: "/opt/radiohound/ansible_timestamp"
+      owner: root
+      group: root
+
+
+
+
+
+
+
+  # This must be last (you know, since it reboots)
+  - name: Post-install reboot
+    shell: "sleep 5 && reboot"
+    when: need_reboot is defined

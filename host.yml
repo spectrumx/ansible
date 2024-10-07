@@ -1,0 +1,15 @@
+---
+- hosts: localhost
+  tasks:
+
+  - name: Get new hostname
+    shell: cat /sys/class/net/$(ls /sys/class/net | grep -E '^e' | head -n 1)/address | sed -e 's/://g' | cut -c 9-12
+    register: new_hostname
+    changed_when: False
+
+  - name: Update hostname (systemd)
+    hostname:
+      name: "{{ new_hostname.stdout }}"
+
+  - copy: content="{{ new_hostname.stdout }}" dest=/etc/hostname
+

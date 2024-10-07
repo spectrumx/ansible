@@ -1,0 +1,27 @@
+{
+    "broker_name":"radiohound.ee.nd.edu",
+    "initial_topics":[
+        "radiohound/clients/command/command_to_all",
+        "radiohound/clients/command/$$MAC_ADDRESS$$",
+        "radiohound/clients/configuration/$$MAC_ADDRESS$$"
+    ],
+    "local_broker_name":"localhost",
+    "local_initial_topics":[
+        "radiohound/clients/command/command_to_all",
+        "radiohound/clients/command/$$MAC_ADDRESS$$"
+    ],
+    "mac_address":"$$MAC_ADDRESS$$",
+    "sensors":[
+        {
+            "hardware_id":"1",
+            "type":"sensors.clock.RaspberryClock"
+        },
+        {
+            "altitude":2.0,
+            "hardware_id":"2",
+            "latitude":41.70491,
+            "longitude":-86.240614,
+            "type":"sensors.locationing.DummyGPS"
+        }
+    ]
+}

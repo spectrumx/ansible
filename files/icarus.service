@@ -1,0 +1,13 @@
+[Install]
+WantedBy=multi-user.target
+
+[Unit]
+Description=Icarus RadioHound Daemon
+Requires=network.target mosquitto.service 
+
+[Service]
+WorkingDirectory=/opt/radiohound/icarus
+Environment="PYTHONUNBUFFERED=True"
+ExecStart=/opt/radiohound/icarus/start.py
+Restart=always
+KillMode=process

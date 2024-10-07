@@ -1,0 +1,18 @@
+---
+- hosts: localhost
+  tasks:
+
+  - name: Update Apt repo
+    shell: apt update
+    ignore_errors: yes
+
+  - name: Install Dependencies (Apt)
+    apt:
+      pkg:
+          - mosquitto-clients 
+          - host
+          - dnsutils
+          - screen
+          - telnet
+      state: present
+      update_cache: no

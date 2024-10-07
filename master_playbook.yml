@@ -1,0 +1,10 @@
+---
+- import_playbook: ansible-pull.yml # cron job to run regularly
+- import_playbook: dependencies.yml
+- import_playbook: host.yml
+- import_playbook: icarus.yml
+
+
+
+# Run this last
+- import_playbook: cleanup.yml

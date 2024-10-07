@@ -1,0 +1,135 @@
+---
+- hosts: localhost  
+  tasks:
+    # Setup symlink that's used by some packages
+    - name: setup /opt/radiohound symlink
+      file:
+        src: /opt/radiohound
+        dest: /opt/icarus
+        owner: root
+        group: root
+        state: link
+
+    - name: Install Icarus Dependencies (Apt)
+      apt:
+        pkg:
+            - python3-pip 
+            - python3-venv
+            - netcat
+            - autossh
+            # - librtlsdr-dev 
+            # - hackrf 
+            # - libhackrf-dev
+        state: present
+        update_cache: no
+
+    - name: Create a virtual environment
+      command: python3 -m venv /opt/radiohound/venv
+
+    - name: Install Icarus Dependencies (Pip)
+      pip:
+        name:
+          - paho-mqtt>=1.5.1 
+          - requests>=2.26.0
+          - serial>=0.0.97
+          - schedule>=0.6.0
+          - inotify>=0.2.10
+          - scipy>=1.8.0
+          - pytz>=2022.1
+          - numpy>=1.22.3
+          - pyvisa>=1.12.0
+          - PyVISA-py>=0.5.3
+          - psutil>=6.0.0
+          - gps>=3.19
+        state: present
+        virtualenv: /opt/radiohound/venv
+        virtualenv_python: python
+
+
+    - name: Add icarus user
+      user:
+        name: icarus
+        comment: Radiohound System Account
+        home: /opt/icarus
+        groups: "i2c"
+        shell: /bin/bash
+
+
+    - name: create icarus directory
+      file:
+        path: /opt/radiohound/icarus
+        state: directory
+        owner: icarus
+        group: icarus
+
+    - name: Add git safe directory
+      command: git config --global --add safe.directory /opt/radiohound/icarus
+
+
+    - name: clone icarus repository
+      git:
+        repo: git@github.com:ndwireless/icarus.git
+        dest: /opt/radiohound/icarus
+        update: no
+      register: git_clone
+      become: yes
+      become_user: icarus
+
+    - name: get latest tag
+      shell: "git describe --tags `git rev-list --tags --max-count=1`"
+      args:
+        chdir: /opt/radiohound/icarus
+      when: not git_clone.before
+      register: git_latest_tag
+      become_user: icarus
+
+
+    - name: checkout latest tag
+      git:
+        repo: git@github.com:ndwireless/icarus.git
+        dest: /opt/radiohound/icarus
+        update: yes
+        version: "{{git_latest_tag.stdout}}"
+      when: not git_clone.before
+      become: yes
+      become_user: icarus
+
+    - name: copy default system.json
+      copy:
+        src: /opt/radiohound/ansible/files/system.json
+        dest: /opt/radiohound/icarus/
+        owner: icarus
+        group: icarus
+        force: no
+
+    # - name: setup scripts symlink
+    #   file:
+    #     src: /opt/radiohound/icarus_setup/ansible/files/scripts
+    #     dest: /opt/radiohound/scripts
+    #     owner: root
+    #     group: root
+    #     state: link
+
+
+
+    - name: copy icarus service
+      copy:
+        src: "files/icarus.service"
+        dest: "/etc/systemd/system/"
+        owner: root
+        group: root
+      notify:
+        - systemctl reload
+        - start icarus daemon
+
+  handlers:
+    - name: systemctl reload
+      shell: /bin/systemctl daemon-reload
+        
+    - name: start icarus daemon
+      systemd:
+        name: icarus
+        state: started
+        enabled: yes
+
+...

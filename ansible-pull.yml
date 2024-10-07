@@ -1,0 +1,36 @@
+# ansible-pull setup
+#
+# on remote hosts, set up ansible to run periodically using the latest code
+# from a particular checkout, in pull based fashion, inverting Ansible's
+# usual push-based operating mode.
+#
+# This particular pull based mode is ideal for:
+#
+# (A) massive scale out
+# (B) continual system remediation
+#
+# DO NOT RUN THIS AGAINST YOUR HOSTS WITHOUT CHANGING THE repo_url
+# TO SOMETHING YOU HAVE PERSONALLY VERIFIED
+#
+#
+---
+
+- hosts: localhost
+  remote_user: root
+
+  vars:
+    schedule: '0 0 * * *'
+    cron_user: root
+    logfile: /var/log/ansible-pull.log
+    workdir: /opt/radiohound/ansible
+    repo_url: git@github.com:spectrumx/ansible.git
+    options: --accept-host-key --private-key=/opt/radiohound/.ssh/id_rsa /opt/radiohound/ansible/master_playbook.yml -e actual_hostname=$(/bin/hostname) -i inventory/inventory.ini
+    playbook: /opt/radiohound/ansible/master_playbook.yml
+
+  tasks:
+
+    - name: Create crontab entry to clone/pull git repository
+      template: src=templates/etc_cron.d_ansible-pull.j2 dest=/etc/cron.d/ansible-pull owner=root group=root mode=0644
+
+    - name: Create logrotate entry for ansible-pull.log
+      template: src=templates/etc_logrotate.d_ansible-pull.j2 dest=/etc/logrotate.d/ansible-pull owner=root group=root mode=0644
