@@ -50,7 +50,6 @@
       user:
         name: icarus
         comment: Radiohound System Account
-        home: /opt/icarus
         groups: "i2c"
         shell: /bin/bash
 
