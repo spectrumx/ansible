@@ -27,7 +27,7 @@
 
 
 
-- name: Install Digital RF (Pip)
+  - name: Install Digital RF (Pip)
     pip:
       name:
         - digital_rf
