@@ -16,7 +16,7 @@
           - dnsutils
           - screen
           - telnet
-          - chronyd
+          - chrony
           - telegraf
           - vim
           - less
