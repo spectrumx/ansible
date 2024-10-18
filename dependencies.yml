@@ -9,11 +9,25 @@
   - name: Install Dependencies (Apt)
     apt:
       pkg:
-          - docker-ce
+          - libhdf5-dev
+          - docker.io
           - mosquitto-clients 
           - host
           - dnsutils
           - screen
           - telnet
+          - chronyd
+          - telegraf
+          - vim
+          - less
+          - file
+          - telnet
       state: present
       update_cache: no
+
+
+
+    - name: Install Digital RF (Pip)
+      pip:
+        name:
+          - digital_rf
