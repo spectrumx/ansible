@@ -4,7 +4,8 @@ This is meant to be ran on a fresh image and will setup all necessary packages a
 ## Usage
 
 - Create `/opt/radiohound`
-- Place SSH private key in `/opt/radiohound/.ssh/ansible_key`.  See Randy for more info about the key.
+- Place deploy key in `/opt/radiohound/.ssh/ansible_key`.  See Randy for more info about the key.
+- Place system github key in `/opt/radiohound/.ssh/icarus_key`.  See Randy for more info about the key.
 - Clone this repo to `/opt/radiohound/ansible`
 ```
 GIT_SSH_COMMAND='ssh -i /opt/radiohound/.ssh/ansible_key -o IdentitiesOnly=yes' git clone git@github.com:spectrumx/ansible.git

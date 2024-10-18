@@ -17,6 +17,7 @@
             - python3-venv
             - netcat
             - autossh
+            - mosquitto
             # - librtlsdr-dev 
             # - hackrf 
             # - libhackrf-dev
@@ -53,6 +54,21 @@
         groups: "i2c"
         shell: /bin/bash
 
+    - name: create icarus' .ssh directory
+      file:
+        path: /home/icarus/.ssh
+        state: directory
+        owner: icarus
+        group: icarus
+        mode: 0700
+
+    - name: copy ssh key to Icarus
+      copy:
+        src: /opt/radiohound/.ssh/icarus_key
+        dest: /home/icarus/.ssh/id_rsa
+        mode: 0600
+        owner: icarus
+        group: icarus
 
     - name: create icarus directory
       file:
@@ -70,6 +86,8 @@
         repo: git@github.com:ndwireless/icarus.git
         dest: /opt/radiohound/icarus
         update: no
+        key_file: /home/icarus/.ssh/id_rsa
+        accept_hostkey: yes
       register: git_clone
       become: yes
       become_user: icarus
