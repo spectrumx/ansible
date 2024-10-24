@@ -3,6 +3,7 @@
 - import_playbook: dependencies.yml
 - import_playbook: host.yml
 - import_playbook: icarus.yml
+- import_playbook: radioconda.yml
 
 
 
