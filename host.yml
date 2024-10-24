@@ -13,3 +13,11 @@
 
   - copy: content="{{ new_hostname.stdout }}" dest=/etc/hostname
 
+
+  - name: Create /data for ring buffers
+    file:
+      path: /data
+      state: directory
+      owner: mep
+      group: mep
+      mode: 777

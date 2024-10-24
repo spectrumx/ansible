@@ -1,0 +1,29 @@
+---
+- hosts: localhost
+  tasks:
+
+  - name: Install DHCP Server
+    apt:
+      pkg:
+          - isc-dhcp-server
+      state: present
+      update_cache: no
+
+  - name: Copy dhcpd.conf
+    copy:
+      src: "files/dhcpd.conf"
+      dest: /etc/dhcp/dhcpd.conf
+      owner: root
+      group: root
+    notify: 
+      - restart dhcpd
+
+
+
+
+  handlers:
+    - name: restart dhcpd
+      systemd:
+        name: isc-dhcp-server
+        state: restarted
+        enabled: yes

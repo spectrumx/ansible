@@ -2,10 +2,6 @@
 - hosts: localhost
   tasks:
 
-  - name: Update Apt repo
-    shell: apt update
-    ignore_errors: yes
-
   - name: Install Dependencies (Apt)
     apt:
       pkg:
@@ -24,7 +20,7 @@
           - telnet
           - python3-pip
       state: present
-      update_cache: no
+      update_cache: yes
 
 
 
