@@ -100,16 +100,26 @@
       register: git_latest_tag
       become_user: icarus
 
-
-    - name: checkout latest tag
+    - name: checkout dev branch
       git:
         repo: git@github.com:ndwireless/icarus.git
         dest: /opt/radiohound/icarus
         update: yes
-        version: "{{git_latest_tag.stdout}}"
+        version: "dev"
       when: not git_clone.before
       become: yes
       become_user: icarus
+
+
+    # - name: checkout latest tag
+    #   git:
+    #     repo: git@github.com:ndwireless/icarus.git
+    #     dest: /opt/radiohound/icarus
+    #     update: yes
+    #     version: "{{git_latest_tag.stdout}}"
+    #   when: not git_clone.before
+    #   become: yes
+    #   become_user: icarus
 
     - name: copy default system.json
       copy:
