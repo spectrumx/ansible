@@ -14,11 +14,21 @@
           - telnet
           - chrony
           - telegraf
+          - influxdb
+          - influxdb-client
           - vim
           - less
           - file
           - telnet
+          - iptables
           - python3-pip
+          - xrdp
+          - cmake
+          - xorg-dev
+          - boost-all-dev
+          - minicom
+          - net-tools
+          - iftop
       state: present
       update_cache: yes
 
@@ -27,4 +37,4 @@
   - name: Install Digital RF (Pip)
     pip:
       name:
-        - digital_rf
+        - jetson-stats

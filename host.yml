@@ -21,3 +21,38 @@
       owner: mep
       group: mep
       mode: 777
+
+  - name: Add MASQUERADE rule to POSTROUTING chain
+    iptables:
+      table: nat
+      chain: POSTROUTING
+      out_interface: eth0
+      jump: MASQUERADE
+    notify: Save iptables
+
+  - name: Add FORWARD rule for RELATED,ESTABLISHED state
+    iptables:
+      chain: FORWARD
+      in_interface: eth0
+      out_interface: eth1
+      match: state
+      state: RELATED,ESTABLISHED
+      jump: ACCEPT
+    notify: Save iptables
+
+  - name: Add FORWARD rule to allow traffic from eth1 to eth0
+    iptables:
+      chain: FORWARD
+      in_interface: eth1
+      out_interface: eth0
+      jump: ACCEPT
+    notify: Save iptables
+
+  handlers:
+    - name: Save iptables
+      command: /sbin/service iptables save
+      when: ansible_os_family == "RedHat"
+
+    - name: Save iptables
+      command: /sbin/iptables-save
+      when: ansible_os_family == "Debian"

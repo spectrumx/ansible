@@ -9,7 +9,7 @@
         groups: "i2c"
         shell: /bin/bash
 
-    - name: create icarus' .ssh directory
+    - name: create mep .ssh directory
       file:
         path: /home/mep/.ssh
         state: directory
