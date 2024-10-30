@@ -22,10 +22,10 @@
     schedule: '0 0 * * *'
     cron_user: root
     logfile: /var/log/ansible-pull.log
-    workdir: /opt/radiohound/ansible
+    workdir: /opt/ansible
     repo_url: git@github.com:spectrumx/ansible.git
-    options: --accept-host-key --private-key=/opt/radiohound/.ssh/id_rsa /opt/radiohound/ansible/master_playbook.yml -e actual_hostname=$(/bin/hostname) -i inventory/inventory.ini
-    playbook: /opt/radiohound/ansible/master_playbook.yml
+    options: --accept-host-key --private-key=/opt/radiohound/.ssh/id_rsa /opt/ansible/master_playbook.yml -e actual_hostname=$(/bin/hostname) -i inventory/inventory.ini
+    playbook: /opt/ansible/master_playbook.yml
 
   tasks:
 

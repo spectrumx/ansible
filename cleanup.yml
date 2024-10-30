@@ -4,7 +4,7 @@
   - name: Save ansible timestamp
     copy:
       src: "files/ansible_timestamp"
-      dest: "/opt/radiohound/ansible_timestamp"
+      dest: "/opt/ansible_timestamp"
       owner: root
       group: root
 

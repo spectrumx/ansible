@@ -25,16 +25,59 @@
           - xrdp
           - cmake
           - xorg-dev
-          - boost-all-dev
+          - libboost-all-dev
           - minicom
           - net-tools
           - iftop
       state: present
       update_cache: yes
 
-
-
-  - name: Install Digital RF (Pip)
+  - name: Install Utilities (Pip)
     pip:
       name:
         - jetson-stats
+
+  - name: Install xrdp
+    shell: "files/xrdp-install-1.4.6.sh"
+
+
+  - name: Check if Mellanox tools are installed
+    ansible.builtin.command:
+      cmd: dpkg-query -W -f='${Status}' mft
+    register: mft_check
+    ignore_errors: yes
+
+  - name: Extract the Mellanox firmware tools archive
+    unarchive:
+      src: "files/mft-4.29.0-131-arm64-deb.tgz"
+      dest: /tmp/
+      remote_src: yes
+    when: mft_check.rc != 0
+
+  - name: Install the .deb package
+    apt:
+      deb: /tmp/mft-4.29.0-131-arm64-deb
+    when: mft_check.rc != 0
+
+
+
+  - name: Clone the Intel 8265 WIFI drivers repository
+    git:
+      repo: 'https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git'
+      dest: /opt/radiohound/linux-firmware
+      update: no
+
+  - name: Copy iwl-8265* files to /lib/firmware
+    copy:
+      src: /opt/radiohound/linux-firmware/iwl-8265*
+      dest: /lib/firmware/
+      mode: '0644'
+
+
+  - name: clone mep-examples repository
+    git:
+      repo: git@github.com:spectrumx/mep-examples.git
+      dest: /opt/mep-examples
+      update: no
+      key_file: /opt/radiohound/.ssh/id_rsa
+      accept_hostkey: yes

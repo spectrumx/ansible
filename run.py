@@ -6,9 +6,9 @@ import subprocess
 import sys
 from time import sleep
 
-homedir="/opt/radiohound/ansible"
+homedir="/opt/ansible"
 logfile="/var/log/ansible-pull.log"
-ssh_file="/opt/radiohound/.ssh/ansible_key"  # SSH KEY MUST EXIST
+ssh_file="/opt/radiohound/.ssh/id_rsa"  # SSH KEY MUST EXIST
 if not os.path.exists(ssh_file):
   print(f"SSH KEY NOT FOUND!\nPlease provide key in {ssh_file} to continue")
   exit(1)
