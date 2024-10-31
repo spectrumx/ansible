@@ -64,7 +64,7 @@
 
     - name: copy ssh key to Icarus
       copy:
-        src: /opt/radiohound/.ssh/icarus_key
+        src: /opt/radiohound/.ssh/id_rsa
         dest: /home/icarus/.ssh/id_rsa
         mode: 0600
         owner: icarus
@@ -136,6 +136,23 @@
     #     owner: root
     #     group: root
     #     state: link
+
+
+    - name: create icarus' virtualenvs directory for compatibility
+      file:
+        path: /opt/icarus/.virtualenvs/python3.9/bin
+        state: directory
+        owner: icarus
+        group: icarus
+        mode: 0755
+
+    - name: Create a symbolic link
+      file:
+        src: /opt/radiohound/venv/bin/python3
+        dest: /opt/icarus/.virtualenvs/python3.9/bin/python
+        owner: icarus
+        group: icarus
+        state: link
 
 
 

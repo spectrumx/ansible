@@ -14,13 +14,7 @@
   - copy: content="{{ new_hostname.stdout }}" dest=/etc/hostname
 
 
-  - name: Create /data for ring buffers
-    file:
-      path: /data
-      state: directory
-      owner: mep
-      group: mep
-      mode: 777
+
 
   - name: Add MASQUERADE rule to POSTROUTING chain
     iptables:
@@ -36,7 +30,7 @@
       in_interface: eth0
       out_interface: eth1
       match: state
-      state: RELATED,ESTABLISHED
+      ctstate: RELATED,ESTABLISHED
       jump: ACCEPT
     notify: Save iptables
 

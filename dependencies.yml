@@ -48,15 +48,14 @@
     ignore_errors: yes
 
   - name: Extract the Mellanox firmware tools archive
-    unarchive:
-      src: "files/mft-4.29.0-131-arm64-deb.tgz"
-      dest: /tmp/
-      remote_src: yes
+    ansible.builtin.command:
+      cmd: tar -xzf files/mft-4.29.0-131-arm64-deb.tgz -C /tmp/
+      warn: false
     when: mft_check.rc != 0
 
   - name: Install the .deb package
     apt:
-      deb: /tmp/mft-4.29.0-131-arm64-deb
+      deb: /tmp/mft-4.29.0-131-arm64-deb/DEBS/mft_4.29.0-131_arm64.deb
     when: mft_check.rc != 0
 
 
@@ -64,15 +63,20 @@
   - name: Clone the Intel 8265 WIFI drivers repository
     git:
       repo: 'https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git'
-      dest: /opt/radiohound/linux-firmware
+      dest: /opt/linux-firmware
       update: no
 
-  - name: Copy iwl-8265* files to /lib/firmware
+  - name: Copy iwl-8265-34 file to /lib/firmware
     copy:
-      src: /opt/radiohound/linux-firmware/iwl-8265*
+      src: /opt/radiohound/linux-firmware/iwlwifi-8265-34.ucode
       dest: /lib/firmware/
       mode: '0644'
 
+  - name: Copy iwl-8265-36 file to /lib/firmware
+    copy:
+      src: /opt/radiohound/linux-firmware/iwlwifi-8265-36.ucode
+      dest: /lib/firmware/
+      mode: '0644'
 
   - name: clone mep-examples repository
     git:

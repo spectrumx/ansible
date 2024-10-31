@@ -36,12 +36,36 @@ python3 /opt/ansible/run.py
 - Install sdkmanager (https://docs.nvidia.com/sdk-manager/install-with-sdkm-jetson/index.html)
 - Run sdkmanager to download stuff
 ```
-sdkmanager --cli --action downloadonly --login-type devzone --product Jetson --target-os Linux --version 6.1 --host --target JETSON_ORIN_NANO_TARGETS --select 'Jetson Linux' --select 'Jetson Linux image' --select 'Flash Jetson Linux' --select 'Jetson Runtime Components' --select 'Additional Setups' --select 'CUDA Runtime' --select 'NVIDIA Container Runtime' --deselect 'CUDA X-AI Runtime' --deselect 'Computer Vision Runtime' --deselect Multimedia --deselect 'Jetson SDK Components' --deselect CUDA --deselect 'CUDA-X AI' --deselect 'Computer Vision' --deselect 'Developer Tools' --deselect 'Jetson Platform Services - Coming Soon' --deselect 'Jetson Platform Services - Coming Soon'
+sdkmanager --cli --action downloadonly --flash skip --login-type devzone --product Jetson --target-os Linux --version 6.1 --host --target JETSON_ORIN_NANO_TARGETS --select 'Jetson Linux' --select 'Jetson Linux image' --select 'Flash Jetson Linux' --select 'Jetson Runtime Components' --select 'Additional Setups' --select 'CUDA Runtime' --select 'NVIDIA Container Runtime' --deselect 'CUDA X-AI Runtime' --deselect 'Computer Vision Runtime' --deselect Multimedia --deselect 'Jetson SDK Components' --deselect CUDA --deselect 'CUDA-X AI' --deselect 'Computer Vision' --deselect 'Developer Tools' --deselect 'Jetson Platform Services - Coming Soon' --deselect 'Jetson Platform Services - Coming Soon'
 ```
 
 This will download the required packages in `~/nvidia`, in my case:
 ```
 /home/rherban/nvidia/nvidia_sdk/JetPack_6.1_Linux_JETSON_ORIN_NANO_TARGETS/Linux_for_Tegra
+```
+
+Prepare the partition table so we can have a separate /data.
+```
+cp tools/kernel_flash/flash_l4t_external.xml mep_partition.xml
+```
+Add these lines near the bottom, after the APP partition:
+```
+        <partition name="DATA" id="2" type="data">
+            <allocation_policy> sequential </allocation_policy>
+            <filesystem_type> basic </filesystem_type>
+            <size> 0 </size>
+            <file_system_attribute> 0 </file_system_attribute>
+            <allocation_attribute> 0x808 </allocation_attribute>
+            <align_boundary> 16384 </align_boundary>
+            <percent_reserved> 0 </percent_reserved>
+            <filename> data.img </filename>
+            <description> Space for recorded data.</description>
+        </partition>
+```
+Prepare the disk image:
+```
+dd if=/dev/zero of=data.img bs=1M count=10 
+mkfs.ext4 data.img  
 ```
 
 Run this command to build image and flash the Jetson
