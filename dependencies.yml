@@ -65,6 +65,7 @@
       repo: 'https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git'
       dest: /opt/linux-firmware
       update: no
+    creates: /opt/linux-firmware/.git
 
   - name: Copy iwl-8265-34 file to /lib/firmware
     copy:
