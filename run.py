@@ -14,7 +14,7 @@ if not os.path.exists(ssh_file):
   exit(1)
 
 if not os.path.exists(homedir):
-  subprocess.call(["git","clone","git@github.com:spectrumx/ansible.git"],env=dict(GIT_SSH_COMMAND='ssh -i ' + ssh_file))
+  subprocess.call(["git","clone","git@github.com:spectrumx/ansible.git"],env=dict(GIT_SSH_COMMAND='ssh -i ' + ssh_file), cwd="/opt")
 os.chdir(homedir)
 
 # If host doesn't exist, add it to 'all' category otherwise Ansible complains

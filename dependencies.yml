@@ -38,7 +38,7 @@
         - jetson-stats
 
   - name: Install xrdp
-    shell: "files/xrdp-install-1.4.6.sh"
+    shell: "files/xrdp-installer-1.4.6.sh"
 
 
   - name: Check if Mellanox tools are installed
@@ -58,14 +58,17 @@
       deb: /tmp/mft-4.29.0-131-arm64-deb/DEBS/mft_4.29.0-131_arm64.deb
     when: mft_check.rc != 0
 
-
+  - name: Check if Intel Wifi repo is cloned
+    stat:
+      path: /opt/linux-firmware
+    register: checkout_intel_wifi
 
   - name: Clone the Intel 8265 WIFI drivers repository
     git:
       repo: 'https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git'
       dest: /opt/linux-firmware
       update: no
-    creates: /opt/linux-firmware/.git
+    when: not checkout_intel_wifi
 
   - name: Copy iwl-8265-34 file to /lib/firmware
     copy:
