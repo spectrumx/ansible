@@ -72,13 +72,13 @@
 
   - name: Copy iwl-8265-34 file to /lib/firmware
     copy:
-      src: /opt/radiohound/linux-firmware/iwlwifi-8265-34.ucode
+      src: /opt/linux-firmware/iwlwifi-8265-34.ucode
       dest: /lib/firmware/
       mode: '0644'
 
   - name: Copy iwl-8265-36 file to /lib/firmware
     copy:
-      src: /opt/radiohound/linux-firmware/iwlwifi-8265-36.ucode
+      src: /opt/linux-firmware/iwlwifi-8265-36.ucode
       dest: /lib/firmware/
       mode: '0644'
 
