@@ -78,7 +78,7 @@
         group: icarus
 
     - name: Add git safe directory
-      command: git config --global --add safe.directory /opt/radiohound/icarus
+      command: git config --global -f /etc/gitconfig --add safe.directory /opt/radiohound/icarus
       become: yes
       become_user: root
 
