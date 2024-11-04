@@ -79,6 +79,7 @@
 
     - name: Add git safe directory
       command: git config --global --add safe.directory /opt/radiohound/icarus
+      become: root
 
 
     - name: clone icarus repository

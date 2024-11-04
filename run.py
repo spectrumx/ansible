@@ -34,8 +34,9 @@ with open("inventory/inventory-runtime.ini", "w") as configfile:    # save
 # Do we need to install ansible?
 if not os.path.isfile("/usr/bin/ansible-playbook"):
   print("Installing ansible")
-  subprocess.call(["/usr/bin/apt-get","update"])
-  subprocess.call(["/usr/bin/apt-get","install","-y","ansible","curl"])
+  # Ignore time checks for apt update as we might run early enough in the boot process that ntp hasn't ran yet.  
+  subprocess.call(["/usr/bin/apt", "-o","Acquire::Check-Valid-Until=false","-o","Acquire::Check-Date=false", "update"])
+  subprocess.call(["/usr/bin/apt", "-o","Acquire::Check-Valid-Until=false","-o","Acquire::Check-Date=false", "install","-y","ansible","curl"])
 
 
 # If you specify 'git' as an argument or we're running through cron (no tty), then update git
@@ -60,7 +61,7 @@ else:
   file = 'master_playbook.yml'
 
 output = open(logfile,'w')
-if sys.stdout.isatty():
+if sys.stdout.isatty() or 'setup_ansible' in os.path.basename(__file__):
   subprocess.call(["/usr/bin/ansible-playbook","-e actual_hostname="+hostname,"-i","inventory/inventory-runtime.ini","--connection=local", file], env=dict(PATH='/usr/bin/:/bin:/usr/local/sbin:/usr/sbin:/sbin',HOME=homedir))
 else:
   subprocess.call(["/usr/bin/ansible-playbook","-e actual_hostname="+hostname,"-i","inventory/inventory-runtime.ini","--connection=local", file], stdout=output, stderr=subprocess.STDOUT, env=dict(PATH='/usr/bin/:/bin:/usr/local/sbin:/usr/sbin:/sbin',HOME=homedir))
