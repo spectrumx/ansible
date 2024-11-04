@@ -14,7 +14,7 @@ if not os.path.exists(ssh_file):
   exit(1)
 
 if not os.path.exists(homedir):
-  subprocess.call(["git","clone","git@github.com:spectrumx/ansible.git"],env=dict(GIT_SSH_COMMAND='ssh -i ' + ssh_file), cwd="/opt")
+  subprocess.call(["git","clone","git@github.com:spectrumx/ansible.git"],env=dict(GIT_SSH_COMMAND='ssh -o StrictHostKeyChecking=accept-new -i ' + ssh_file), cwd="/opt")
 os.chdir(homedir)
 
 # If host doesn't exist, add it to 'all' category otherwise Ansible complains
@@ -35,7 +35,7 @@ with open("inventory/inventory-runtime.ini", "w") as configfile:    # save
 if not os.path.isfile("/usr/bin/ansible-playbook"):
   print("Installing ansible")
   subprocess.call(["/usr/bin/apt-get","update"])
-  subprocess.call(["/usr/bin/apt-get","install","-y","ansible"])
+  subprocess.call(["/usr/bin/apt-get","install","-y","ansible","curl"])
 
 
 # If you specify 'git' as an argument or we're running through cron (no tty), then update git
