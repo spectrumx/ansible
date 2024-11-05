@@ -41,7 +41,7 @@ Directions taken from https://wiki.seeedstudio.com/reComputer_A608_Flash_System
 ```
 cd <path to where you downloaded the above files>
 sudo apt install unzip 
-sudo tar xpf Tegra_Linux_Sample-Root-Filesystem_R35.4.1_aarch64.tbz2 -C Linux_for_Tegra/rootfs/
+sudo tar xpf Tegra_Linux_Sample-Root-Filesystem_R36.3.0_aarch64.tbz2 -C Linux_for_Tegra/rootfs/
 cd Linux_for_Tegra/
 sudo ./apply_binaries.sh
 sudo ./tools/l4t_flash_prerequisites.sh
@@ -104,6 +104,11 @@ ADDITIONAL_DTB_OVERLAY_OPT="BootOrderNvme.dtbo" ./tools/kernel_flash/l4t_initrd_
 - Fix Icarus' virtualenv path
 - Add SDS pip package
 
+
+
+
+# Additional tricks for testing
+- Add ssh key for git commands:  `export GIT_SSH_COMMAND="ssh -i /opt/radiohound/.ssh/id_rsa"`
 
 
 
