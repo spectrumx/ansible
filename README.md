@@ -23,26 +23,34 @@ python3 /opt/ansible/run.py
 
 
 
-# To build Jetson image
+# To build Jetson image with A608 Carrier Board
 
 ## Physical setup:
 - Ubuntu 2204 machine
 - Jetson booted in recovery mode, once booted remove jumper
 - Ubuntu machine connected (via USB-A) to Jetson (USB-C)
 - NVME drive in a USB-C drive chassis, connected with USB-A adapter to the Jetson
+- Confirm Jetson is connected by running `lsusb` and looking for Nvidia device
 
 ## Software setup on Ubuntu machine:
-- Confirm Jetson is connected with lsusb
-- Install sdkmanager (https://docs.nvidia.com/sdk-manager/install-with-sdkm-jetson/index.html)
-- Run sdkmanager to download stuff
+Directions taken from https://wiki.seeedstudio.com/reComputer_A608_Flash_System
+- Download Driver Package (BSP) and Sample Root Filesystem from https://developer.nvidia.com/embedded/jetson-linux-r363
+- Download peripheral drivers from https://szseeedstudio-my.sharepoint.cn/:u:/g/personal/youjiang_yu_szseeedstudio_partner_onmschina_cn/EbF6_Z1ocnZKnEfynnxDZ7UBkQTAHwq7H1dsga3RITPwhw?e=395QXx
+
+
 ```
-sdkmanager --cli --action downloadonly --flash skip --login-type devzone --product Jetson --target-os Linux --version 6.1 --host --target JETSON_ORIN_NANO_TARGETS --license accept --select 'Jetson Linux' --select 'Jetson Linux image' --select 'Flash Jetson Linux' --select 'Jetson Runtime Components' --select 'Additional Setups' --select 'CUDA Runtime' --select 'NVIDIA Container Runtime' --deselect 'CUDA X-AI Runtime' --deselect 'Computer Vision Runtime' --deselect Multimedia --deselect 'Jetson SDK Components' --deselect CUDA --deselect 'CUDA-X AI' --deselect 'Computer Vision' --deselect 'Developer Tools' --deselect 'Jetson Platform Services - Coming Soon' --deselect 'Jetson Platform Services - Coming Soon'
+cd <path to where you downloaded the above files>
+sudo apt install unzip 
+sudo tar xpf Tegra_Linux_Sample-Root-Filesystem_R35.4.1_aarch64.tbz2 -C Linux_for_Tegra/rootfs/
+cd Linux_for_Tegra/
+sudo ./apply_binaries.sh
+sudo ./tools/l4t_flash_prerequisites.sh
+cd ..
+unzip a608_jp60.zip
+sudo cp -r ./608_jp60/Linux_for_Tegra/* ./Linux_for_Tegra/
 ```
 
-This will download the required packages in `~/nvidia`, in my case:
-```
-/home/rherban/nvidia/nvidia_sdk/JetPack_6.1_Linux_JETSON_ORIN_NANO_TARGETS/Linux_for_Tegra
-```
+
 
 <!-- ### DOES NOT WORK CURRENTLY, JUST USE SINGLE PARTITION: Prepare the partition table so we can have a separate /data.
 ```
@@ -73,9 +81,9 @@ mkfs.ext4 data.img
 ```
 cd /home/rherban
 git clone git@github.com:spectrumx/ansible.git
-cd /home/rherban/nvidia/nvidia_sdk/JetPack_6.1_Linux_JETSON_ORIN_NANO_TARGETS/Linux_for_Tegra/rootfs
+cd Linux_for_Tegra/rootfs
 mkdir opt/radiohound
-cp -r /path/to/keys/.ssh opt/radiohound/.ssh    # MUST GET KEYS FROM RANDY
+cp -r /home/rherban/ssh opt/radiohound/.ssh    # MUST GET KEYS FROM RANDY
 cp /home/rherban/ansible/files/setup_ansible.service etc/systemd/system/
 cp /home/rherban/ansible/run.py root/setup_ansible.py
 chmod 755 root/setup_ansible.py
@@ -93,6 +101,7 @@ ADDITIONAL_DTB_OVERLAY_OPT="BootOrderNvme.dtbo" ./tools/kernel_flash/l4t_initrd_
 # TODO:
 - Add separate /data partition
 - Fix Icarus' virtualenv path
+- Add SDS pip package
 
 
 
