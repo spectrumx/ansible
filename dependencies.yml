@@ -36,6 +36,8 @@
     pip:
       name:
         - jetson-stats
+    async: 300
+    poll: 5
 
   - name: Install xrdp
     shell: "files/xrdp-installer-1.4.6.sh"
