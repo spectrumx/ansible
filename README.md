@@ -84,6 +84,7 @@ git clone git@github.com:spectrumx/ansible.git
 cd Linux_for_Tegra/rootfs
 mkdir opt/radiohound
 cp -r /home/rherban/ssh opt/radiohound/.ssh    # MUST GET KEYS FROM RANDY
+chmod 600 opt/radiohound/.ssh/id_rsa
 cp /home/rherban/ansible/files/setup_ansible.service etc/systemd/system/
 cp /home/rherban/ansible/run.py root/setup_ansible.py
 chmod 755 root/setup_ansible.py
