@@ -32,26 +32,26 @@
       state: present
       update_cache: yes
 
-  - name: Install Utilities (Pip)
-    pip:
-      name:
-        - jetson-stats
-    async: 120
-    poll: 5
-    register: jetson_stats_watcher
+  # - name: Install Utilities (Pip)
+  #   pip:
+  #     name:
+  #       - jetson-stats
+  #   async: 120
+  #   poll: 5
+  #   register: jetson_stats_watcher
 
-  - name: Check jetson-stats install
-    async_status:
-      jid: "{{ jetson_stats_watcher.ansible_job_id }}"
-    register: jetson_stats_result
-    until: jeton_status_result.finished
-    retries: 60  # Adjust based on your needs
-    delay: 10
-    failed_when: jetson_status_result.rc is not defined and retries == 60
+  # - name: Check jetson-stats install
+  #   async_status:
+  #     jid: "{{ jetson_stats_watcher.ansible_job_id }}"
+  #   register: jetson_stats_result
+  #   until: jeton_status_result.finished
+  #   retries: 60  # Adjust based on your needs
+  #   delay: 10
+  #   failed_when: jetson_status_result.rc is not defined and retries == 60
 
-  - name: Handle jetson-stats timeout
-    command: /usr/sbin/service jtop stop
-    when: jeton_status_result.rc is not defined
+  # - name: Handle jetson-stats timeout
+  #   command: /usr/sbin/service jtop stop
+  #   when: jeton_status_result.rc is not defined
 
 
 
