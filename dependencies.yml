@@ -36,11 +36,29 @@
     pip:
       name:
         - jetson-stats
-    async: 300
+    async: 120
     poll: 5
+    register: jetson-stats-watcher
+
+  - name: Check jetson-stats install
+    async_status:
+      jid: "{{ jetson-stats-watcher.ansible_job_id }}"
+    register: jetson-stats-result
+    until: jeton-status-result.finished
+    retries: 60  # Adjust based on your needs
+    delay: 10
+
+  - name: Handle jetson-stats timeout
+    command: /usr/sbin/service jtop stop
+    when: jeton-status-result.failed
+
+
 
   - name: Install xrdp
     shell: "files/xrdp-installer-1.4.6.sh"
+
+  # - name: Install uv
+  #   shell: "files/uv-install.sh"
 
 
   - name: Check if Mellanox tools are installed

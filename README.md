@@ -40,13 +40,14 @@ Directions taken from https://wiki.seeedstudio.com/reComputer_A608_Flash_System
 
 ```
 cd <path to where you downloaded the above files>
-sudo apt install unzip 
-sudo tar xpf Tegra_Linux_Sample-Root-Filesystem_R36.3.0_aarch64.tbz2 -C Linux_for_Tegra/rootfs/
+sudo apt install unzip bzip2
+sudo tar xpf jetson_linux_r36.3.0_aarch64.tbz2
+sudo tar xpf tegra_linux_sample-root-filesystem_r36.3.0_aarch64.tbz2 -C Linux_for_Tegra/rootfs/
 cd Linux_for_Tegra/
 sudo ./apply_binaries.sh
 sudo ./tools/l4t_flash_prerequisites.sh
 cd ..
-unzip a608_jp60.zip
+unzip 608_jp60.zip
 sudo cp -r ./608_jp60/Linux_for_Tegra/* ./Linux_for_Tegra/
 ```
 
@@ -80,15 +81,22 @@ mkfs.ext4 data.img
 ### Add files to rootfs before building the image
 ```
 cd /home/rherban
-git clone git@github.com:spectrumx/ansible.git
+git clone git@github.com:spectrumx/id_rsa.git
+
 cd Linux_for_Tegra/rootfs
 mkdir opt/radiohound
 cp -r /home/rherban/ssh opt/radiohound/.ssh    # MUST GET KEYS FROM RANDY
 chmod 600 opt/radiohound/.ssh/id_rsa
+
 cp /home/rherban/ansible/files/setup_ansible.service etc/systemd/system/
 cp /home/rherban/ansible/run.py root/setup_ansible.py
 chmod 755 root/setup_ansible.py
 ln -s etc/systemd/system/setup_ansible.service etc/systemd/system/multi-user.target.wants/setup_ansible.service
+
+sudo ./tools/l4t_create_default_user.sh --accept-license -u admin -p <REDACTED> 
+
+
+cd ..
 ```
 
 
@@ -107,7 +115,7 @@ ADDITIONAL_DTB_OVERLAY_OPT="BootOrderNvme.dtbo" ./tools/kernel_flash/l4t_initrd_
 
 
 
-# Additional tricks for testing
+# Additional tips
 - Add ssh key for git commands:  `export GIT_SSH_COMMAND="ssh -i /opt/radiohound/.ssh/id_rsa"`
 
 
