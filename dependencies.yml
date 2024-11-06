@@ -47,10 +47,11 @@
     until: jeton-status-result.finished
     retries: 60  # Adjust based on your needs
     delay: 10
+    failed_when: jetson-status-result.rc is not defined and retries == 60
 
   - name: Handle jetson-stats timeout
     command: /usr/sbin/service jtop stop
-    when: jeton-status-result.failed
+    when: jeton-status-result.rc is not defined
 
 
 
