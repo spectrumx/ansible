@@ -32,10 +32,10 @@
       state: present
       update_cache: yes
 
-  # - name: Install Utilities (Pip)
-  #   pip:
-  #     name:
-  #       - jetson-stats
+  - name: Install Utilities (Pip)
+    pip:
+      name:
+        - jetson-stats
   #   async: 120
   #   poll: 5
   #   register: jetson_stats_watcher
