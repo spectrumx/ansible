@@ -32,6 +32,13 @@
       state: present
       update_cache: yes
 
+
+  - name: Remove gnome-initial-setup
+    apt:
+      pkg:
+        - gnome-initial-setup
+      state: absent
+
   - name: Install Utilities (Pip)
     pip:
       name:
