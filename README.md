@@ -4,8 +4,7 @@ This is meant to be ran on a fresh image and will setup all necessary packages a
 ## Usage
 
 - Create `/opt/radiohound`
-- Place system key in `/opt/radiohound/.ssh/id_rsa`.  See Randy for more info about the key.
-- Place icarus key in `/opt/radiohound/.ssh/icarus_key`.  See Randy for more info about the key.
+- Place ssh key in `/opt/radiohound/.ssh/id_rsa`.  See Randy for more info about the key.
 - Clone this repo to `/opt/ansible`
 ```
 GIT_SSH_COMMAND='ssh -i /opt/radiohound/.ssh/ansible_key -o IdentitiesOnly=yes' git clone git@github.com:spectrumx/ansible.git
@@ -93,7 +92,7 @@ cp /home/rherban/ansible/run.py root/setup_ansible.py
 chmod 755 root/setup_ansible.py
 ln -s etc/systemd/system/setup_ansible.service etc/systemd/system/multi-user.target.wants/setup_ansible.service
 
-sudo ./tools/l4t_create_default_user.sh --accept-license -u admin -p <REDACTED> 
+sudo ./tools/l4t_create_default_user.sh --accept-license -u mep -p <REDACTED> 
 
 
 cd ..
