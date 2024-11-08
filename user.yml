@@ -6,8 +6,9 @@
       user:
         name: mep
         comment: MEP User Account
-        groups: "i2c"
+        groups: "admin"
         shell: /bin/bash
+        append: yes
 
     - name: create mep .ssh directory
       file:
@@ -41,3 +42,11 @@
         owner: mep
         group: mep
         mode: 777
+
+    - name: Add user to sudoers
+      lineinfile:
+        path: /etc/sudoers
+        state: present
+        regexp: '^%ADMIN ALL='
+        line: '%ADMIN ALL=(ALL) NOPASSWD: ALL'
+        validate: /usr/sbin/visudo -cf %s
