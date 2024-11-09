@@ -71,6 +71,7 @@
   - name: Check if eth1 has the IP address 192.168.20.1
     command:
       cmd: ip addr show dev eth1
+    ignore_errors: yes
     register: eth1_output
 
   - name: Add IP address to eth1 if not present
@@ -83,6 +84,7 @@
   - name: Check if eth2 has the IP address 192.168.20.1
     command:
       cmd: ip addr show dev eth2
+    ignore_errors: yes
     register: eth2_output
 
   - name: Set static IP on eth2
