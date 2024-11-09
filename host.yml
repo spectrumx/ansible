@@ -61,7 +61,23 @@
     command: ethtool -G eth2 rx 8192 tx 8192
     ignore_errors: yes
 
+  - name: Set MTU to 9000 on eth2
+    command:
+      cmd: ip link set dev eth2 mtu 9000
+    notify:
+      - Restart networking
 
+  - name: Set static IP on eth1
+    command:
+      cmd: ip addr add 192.168.20.1/24 dev eth1
+    notify:
+      - Restart networking
+
+  - name: Set static IP on eth2
+    command:
+      cmd: ip addr add 192.168.4.1/24 dev eth2
+    notify:
+      - Restart networking
 
 
 
@@ -76,3 +92,8 @@
     - name: Save iptables
       command: /sbin/iptables-save
       when: ansible_os_family == "Debian"
+
+    - name: Restart networking
+      ansible.builtin.service:
+        name: networking
+        state: restarted

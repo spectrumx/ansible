@@ -6,7 +6,7 @@
       user:
         name: mep
         comment: MEP User Account
-        groups: "admin"
+        groups: "adm"
         shell: /bin/bash
         append: yes
 
@@ -17,6 +17,14 @@
         owner: mep
         group: mep
         mode: 0700
+
+    - name: chown /opt to mep
+      file:
+        path: /opt/
+        state: directory
+        owner: root
+        group: adm
+        mode: 0775
 
     - name: copy ssh key to mep
       copy:
@@ -47,6 +55,22 @@
       lineinfile:
         path: /etc/sudoers
         state: present
-        regexp: '^%ADMIN ALL='
-        line: '%ADMIN ALL=(ALL) NOPASSWD: ALL'
+        regexp: '^%adm ALL='
+        line: '%adm ALL=(ALL) NOPASSWD: ALL'
         validate: /usr/sbin/visudo -cf %s
+
+
+    - name: clone mep-examples repository
+      git:
+        repo: git@github.com:spectrumx/mep-examples.git
+        dest: /opt/mep-examples
+        update: no
+        key_file: /opt/radiohound/.ssh/id_rsa
+        accept_hostkey: yes
+      become: yes
+      become_user: mep
+
+    - name: Install xrdp
+      shell: "files/xrdp-installer-1.4.6.sh"
+      become: yes
+      become_user: mep

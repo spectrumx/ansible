@@ -18,7 +18,12 @@
     notify: 
       - restart dhcpd
 
-
+  - name: Set interface in dhcp-server
+    lineinfile:
+      path: /etc/default/isc-dhcp-server
+      state: present
+      regexp: '^INTERFACESv4=""'
+      line: 'INTERFACESv4="eth1"'
 
 
   handlers:

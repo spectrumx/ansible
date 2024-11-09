@@ -29,6 +29,8 @@
           - minicom
           - net-tools
           - iftop
+          - backport-iwlwifi-dkms
+          - firefox
       state: present
       update_cache: yes
 
@@ -60,10 +62,6 @@
   #   command: /usr/sbin/service jtop stop
   #   when: jeton_status_result.rc is not defined
 
-
-
-  - name: Install xrdp
-    shell: "files/xrdp-installer-1.4.6.sh"
 
   # - name: Install uv
   #   shell: "files/uv-install.sh"
@@ -109,11 +107,3 @@
       src: /opt/linux-firmware/iwlwifi-8265-36.ucode
       dest: /lib/firmware/
       mode: '0644'
-
-  - name: clone mep-examples repository
-    git:
-      repo: git@github.com:spectrumx/mep-examples.git
-      dest: /opt/mep-examples
-      update: no
-      key_file: /opt/radiohound/.ssh/id_rsa
-      accept_hostkey: yes
