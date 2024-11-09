@@ -78,6 +78,7 @@
     command:
       cmd: ip addr add 192.168.20.1/24 dev eth1
     when: "'192.168.20.1' not in eth1_output.stdout"
+    ignore_errors: yes
     notify:
       - Restart networking
 
@@ -91,6 +92,7 @@
     command:
       cmd: ip addr add 192.168.4.1/24 dev eth2
     when: "'192.168.4.1' not in eth2_output.stdout"
+    ignore_errors: yes
     notify:
       - Restart networking
 
