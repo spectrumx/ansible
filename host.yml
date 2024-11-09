@@ -64,18 +64,31 @@
   - name: Set MTU to 9000 on eth2
     command:
       cmd: ip link set dev eth2 mtu 9000
+    ignore_errors: yes
     notify:
       - Restart networking
 
-  - name: Set static IP on eth1
+  - name: Check if eth1 has the IP address 192.168.20.1
+    command:
+      cmd: ip addr show dev eth1
+    register: eth1_output
+
+  - name: Add IP address to eth1 if not present
     command:
       cmd: ip addr add 192.168.20.1/24 dev eth1
+    when: "'192.168.20.1' not in eth1_output.stdout"
     notify:
       - Restart networking
+
+  - name: Check if eth2 has the IP address 192.168.20.1
+    command:
+      cmd: ip addr show dev eth2
+    register: eth2_output
 
   - name: Set static IP on eth2
     command:
       cmd: ip addr add 192.168.4.1/24 dev eth2
+    when: "'192.168.4.1' not in eth2_output.stdout"
     notify:
       - Restart networking
 
