@@ -112,5 +112,5 @@
 
     - name: Restart networking
       ansible.builtin.service:
-        name: networking
+        name: NetworkManager
         state: restarted
