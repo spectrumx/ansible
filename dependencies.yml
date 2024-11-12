@@ -17,6 +17,7 @@
           - influxdb
           - influxdb-client
           - vim
+          - nano
           - less
           - file
           - telnet
@@ -45,10 +46,10 @@
         - gnome-initial-setup
       state: absent
 
-  - name: Install Utilities (Pip)
-    pip:
-      name:
-        - jetson-stats
+  # - name: Install Utilities (Pip)
+  #   pip:
+  #     name:
+  #       - jetson-stats
   #   async: 120
   #   poll: 5
   #   register: jetson_stats_watcher
