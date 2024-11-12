@@ -69,20 +69,21 @@
 
   - name: Check if Mellanox tools are installed
     ansible.builtin.command:
-      cmd: dpkg-query -W -f='${Status}' mft
+      cmd: dpkg-query -W -f='${Status}' mlnx-ofed-kernel-dkms
     register: mft_check
     ignore_errors: yes
 
   - name: Extract the Mellanox firmware tools archive
     ansible.builtin.command:
-      cmd: tar -xzf files/mft-4.29.0-131-arm64-deb.tgz -C /tmp/
+      cmd: tar -xzf files/MLNX_OFED_LINUX-24.07-0.6.1.0-ubuntu22.04-aarch64.tgz -C /tmp/
       warn: false
     when: mft_check.rc != 0
 
   - name: Install the .deb package
-    apt:
-      deb: /tmp/mft-4.29.0-131-arm64-deb/DEBS/mft_4.29.0-131_arm64.deb
+    command:
+      cmd: /tmp/MLNX_OFED_LINUX-24.07-0.6.1.0-ubuntu22.04-aarch64/mlnxofedinstall --force --dpdk --without-fw-update
     when: mft_check.rc != 0
+
 
   - name: Check if Intel Wifi repo is cloned
     stat:
