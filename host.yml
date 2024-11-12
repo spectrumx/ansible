@@ -125,7 +125,19 @@
       line: '\g<0> isolcpus=0-1 nohz_full=0-1 irqaffinity=2-N rcu_nocbs=0-1 rcu_nocb_poll tsc=reliable audit=0 nosoftlockup default_hugepagesz=1G hugepagesz=1G hugepages=2'
       backrefs: yes
 
+  - name: Create udev rule file
+    copy:
+      dest: /etc/udev/rules.d/70-persistent-net.rules
+      content: |
+        SUBSYSTEM=="net", ACTION=="add", ATTR{altname}=="enP1p1s0", NAME="eth0"
+        SUBSYSTEM=="net", ACTION=="add", ATTR{altname}=="enP8p1s0", NAME="eth1"
+        SUBSYSTEM=="net", ACTION=="add", ATTR{altname}=="enP4p1s0np0", NAME="eth2"
 
+  - name: Reload udev rules
+    command: udevadm control --reload-rules
+
+  - name: Trigger udev rules
+    command: udevadm trigger --type=devices --action=add
 
 
 
