@@ -125,7 +125,7 @@
       dest: /opt/holohub
       update: no
       version: "mep"
-    when: checkout_holohub
+      accept_hostkey: yes
     register: run_holohub_setup
 
   - name: Install holohub
