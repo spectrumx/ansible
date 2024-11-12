@@ -15,6 +15,9 @@ if not os.path.exists(ssh_file):
 
 if not os.path.exists(homedir):
   subprocess.call(["git","clone","git@github.com:spectrumx/ansible.git"],env=dict(GIT_SSH_COMMAND='ssh -o StrictHostKeyChecking=accept-new -i ' + ssh_file), cwd="/opt")
+if not os.path.exists(homedir):
+  print("FAILED to checkout git repo.  Aborting install...")
+  sys.exit(1)
 os.chdir(homedir)
 
 # If host doesn't exist, add it to 'all' category otherwise Ansible complains
