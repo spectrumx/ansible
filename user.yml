@@ -42,6 +42,13 @@
         owner: mep
         group: mep
 
+    - name: copy ssh config to mep
+      copy:
+        src: "files/mep_ssh_config"
+        dest: /home/mep/.ssh/config
+        mode: 0600
+        owner: mep
+        group: mep
 
     - name: Create /data for ring buffers
       file:
