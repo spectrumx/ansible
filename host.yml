@@ -139,7 +139,11 @@
   - name: Trigger udev rules
     command: udevadm trigger --type=devices --action=add
 
-
+  - name: Set power mode
+    copy:
+      dest: /var/lib/nvpmodel/status
+      content: "pmode:0003\n"
+    register: need_reboot
 
   handlers:
     - name: Save iptables
