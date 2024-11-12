@@ -79,7 +79,13 @@
 
   - name: Extract the Mellanox firmware tools archive
     ansible.builtin.command:
-      cmd: tar -xzf files/MLNX_OFED_LINUX-24.07-0.6.1.0-ubuntu22.04-aarch64.tgz -C /tmp/
+      cmd: wget https://github.com/spectrumx/ansible/releases/download/deps-20241112/MLNX_OFED_LINUX-24.07-0.6.1.0-ubuntu22.04-aarch64.tgz -o /tmp/MLNX_OFED_LINUX-24.07-0.6.1.0-ubuntu22.04-aarch64.tgz
+      warn: false
+    when: mft_check.rc != 0
+
+  - name: Extract the Mellanox firmware tools archive
+    ansible.builtin.command:
+      cmd: tar -xzf /tmp/MLNX_OFED_LINUX-24.07-0.6.1.0-ubuntu22.04-aarch64.tgz -C /tmp/
       warn: false
     when: mft_check.rc != 0
 
@@ -133,6 +139,24 @@
       cmd: './run build mimo_radar_pipeline --configure-args "-DMATX_EN_PYBIND11=ON -DPYBIND11_FINDPYTHON=ON -DPython_EXECUTABLE=/usr/bin/python3 -DPython_ROOT_DIR=/usr/lib/python3"'
       chdir: /opt/holohub
     when: run_holohub_setup
+
+  - name: Check if dpdk is installed
+    ansible.builtin.command:
+      cmd: dpkg-query -W -f='${Status}' dpdk
+    register: dpdk_check
+    ignore_errors: yes
+
+  - name: Download dpdk
+    ansible.builtin.command:
+      cmd: wget https://github.com/spectrumx/ansible/releases/download/deps-20241112/dpdk-for-jetson_22.11.6-1_arm64.deb -o /tmp/dpdk-for-jetson_22.11.6-1_arm64.deb
+      warn: false
+    when: mft_check.rc != 0
+
+  - name: Install dpdk
+    apt:
+      deb: /tmp/dpdk-for-jetson_22.11.6-1_arm64.deb
+      state: present
+    when: dpdk_check.rc != 0
 
   - name: Holohub setcap
     command:
