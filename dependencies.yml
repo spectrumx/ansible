@@ -31,6 +31,10 @@
           - iftop
           - backport-iwlwifi-dkms
           - firefox
+          - cuda-nvtx-12-2 
+          - libcufft-dev-12-2 
+          - libcusolver-dev-12-2 
+          - libcurand-dev-12-2
       state: present
       update_cache: yes
 
@@ -108,3 +112,32 @@
       src: /opt/linux-firmware/iwlwifi-8265-36.ucode
       dest: /lib/firmware/
       mode: '0644'
+
+  - name: Clone holohub repository
+    git:
+      repo: 'https://github.com/ryanvolz/holohub.git'
+      dest: /opt/holohub
+      update: no
+      version: "mep"
+    when: checkout_holohub
+    register: run_holohub_setup
+
+  - name: Install holohub
+    command:
+      cmd: ./run setup
+      chdir: /opt/holohub
+    when: run_holohub_setup
+
+  - name: Install holohub
+    command:
+      cmd: './run build mimo_radar_pipeline --configure-args "-DMATX_EN_PYBIND11=ON -DPYBIND11_FINDPYTHON=ON -DPython_EXECUTABLE=/usr/bin/python3 -DPython_ROOT_DIR=/usr/lib/python3"'
+      chdir: /opt/holohub
+    when: run_holohub_setup
+
+  - name: Holohub setcap
+    command:
+      cmd: 'sudo setcap cap_net_raw,cap_dac_override,cap_dac_read_search,cap_ipc_lock,cap_sys_admin+ep ./build/applications/mimo_radar_pipeline/cpp/mimo_radar_pipeline'
+      chdir: /opt/holohub
+    when: run_holohub_setup
+
+
