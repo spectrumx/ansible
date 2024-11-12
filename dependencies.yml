@@ -161,7 +161,7 @@
 
   - name: Holohub setcap
     command:
-      cmd: 'sudo setcap cap_net_raw,cap_dac_override,cap_dac_read_search,cap_ipc_lock,cap_sys_admin+ep ./build/applications/mimo_radar_pipeline/cpp/mimo_radar_pipeline'
+      cmd: 'setcap cap_net_raw,cap_dac_override,cap_dac_read_search,cap_ipc_lock,cap_sys_admin+ep ./build/applications/mimo_radar_pipeline/cpp/mimo_radar_pipeline'
       chdir: /opt/holohub
     when: run_holohub_setup
 
