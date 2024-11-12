@@ -142,7 +142,7 @@
 
   - name: Check if dpdk is installed
     ansible.builtin.command:
-      cmd: dpkg-query -W -f='${Status}' dpdk
+      cmd: dpkg-query -W -f='${Status}' dpdk-for-jetson
     register: dpdk_check
     ignore_errors: yes
 
