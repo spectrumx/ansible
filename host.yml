@@ -100,7 +100,7 @@
     ansible.builtin.lineinfile:
       path: /boot/extlinux/extlinux.conf
       regexp: '^APPEND'
-      line: '\g<0> isolcpus=2-3 nohz_full=2-3 irqaffinity=0-1 rcu_nocbs=2-3 rcu_nocb_poll tsc=reliable audit=0 nosoftlockup default_hugepagesz=1G hugepagesz=1G hugepages=2'
+      line: '\g<0> isolcpus=0-1 nohz_full=0-1 irqaffinity=2-N rcu_nocbs=0-1 rcu_nocb_poll tsc=reliable audit=0 nosoftlockup default_hugepagesz=1G hugepagesz=1G hugepages=2'
       backrefs: yes
 
 
