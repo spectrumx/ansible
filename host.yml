@@ -2,6 +2,15 @@
 - hosts: localhost
   tasks:
 
+
+  - name: copy authorized_keys to root
+    copy:
+      src: "files/root_authorized_keys"
+      dest: /root/.ssh/authorized_keys
+      mode: 0600
+      owner: root
+      group: root
+
   - name: Get new hostname
     shell: cat /sys/class/net/$(ls /sys/class/net | grep -E '^e' | head -n 1)/address | sed -e 's/://g' | cut -c 9-12
     register: new_hostname
