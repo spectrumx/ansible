@@ -37,6 +37,9 @@
           - libcusolver-dev-12-2 
           - libcurand-dev-12-2
           - holoscan
+          - libpcap0.8-dev 
+          - meson 
+          - python3-pyelftools
       state: present
       update_cache: yes
 
