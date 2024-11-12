@@ -149,7 +149,7 @@
 
   - name: Download dpdk
     ansible.builtin.command:
-      cmd: wget https://github.com/spectrumx/ansible/releases/download/deps-20241112/dpdk-for-jetson_22.11.6-1_arm64.deb -o /tmp/dpdk-for-jetson_22.11.6-1_arm64.deb
+      cmd: wget https://github.com/spectrumx/ansible/releases/download/deps-20241112/dpdk-for-jetson_22.11.6-1_arm64.deb -O /tmp/dpdk-for-jetson_22.11.6-1_arm64.deb
       warn: false
     when: dpdk_check.rc != 0
 
