@@ -34,6 +34,14 @@
         owner: mep
         group: mep
 
+    - name: copy git ssh key to mep
+      copy:
+        src: /opt/radiohound/.ssh/id_rsa
+        dest: /home/mep/.ssh/git_key
+        mode: 0600
+        owner: mep
+        group: mep
+
     - name: copy authorized_keys to mep
       copy:
         src: "files/mep_authorized_keys"
@@ -67,15 +75,28 @@
         validate: /usr/sbin/visudo -cf %s
 
 
-    - name: clone mep-examples repository
+    - name: Clone mep-examples repository
       git:
         repo: git@github.com:spectrumx/mep-examples.git
         dest: /opt/mep-examples
         update: no
         key_file: /opt/radiohound/.ssh/id_rsa
         accept_hostkey: yes
-      become: yes
-      become_user: mep
+
+    - name: Add key to git repo
+      lineinfile:
+        path: /var/lib/nvpmodel/status
+        insertafter: '^\[core\]'
+        line: 'sshCommand = "ssh -i ~/.ssh/git_key"'
+      register: need_reboot
+
+    - name: chown /opt/mep-examples to mep
+      file:
+        path: /opt/mep-examples
+        state: directory
+        owner: mep
+        group: mep
+        mode: 0775
 
     - name: Install xrdp
       shell: "files/xrdp-installer-1.4.6.sh"
