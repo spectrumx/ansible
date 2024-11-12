@@ -139,11 +139,6 @@
       chdir: /opt/holohub
     when: run_holohub_setup
 
-  - name: Install holohub
-    command:
-      cmd: './run build mimo_radar_pipeline --configure-args "-DMATX_EN_PYBIND11=ON -DPYBIND11_FINDPYTHON=ON -DPython_EXECUTABLE=/usr/bin/python3 -DPython_ROOT_DIR=/usr/lib/python3"'
-      chdir: /opt/holohub
-    when: run_holohub_setup
 
   - name: Check if dpdk is installed
     ansible.builtin.command:
@@ -162,6 +157,12 @@
       deb: /tmp/dpdk-for-jetson_22.11.6-1_arm64.deb
       state: present
     when: dpdk_check.rc != 0
+
+  - name: Install holohub
+    command:
+      cmd: './run build mimo_radar_pipeline --configure-args "-DMATX_EN_PYBIND11=ON -DPYBIND11_FINDPYTHON=ON -DPython_EXECUTABLE=/usr/bin/python3 -DPython_ROOT_DIR=/usr/lib/python3"'
+      chdir: /opt/holohub
+    when: run_holohub_setup
 
   - name: Holohub setcap
     command:
