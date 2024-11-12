@@ -96,7 +96,7 @@
 
   - name: Install the .deb package
     command:
-      cmd: /tmp/MLNX_OFED_LINUX-24.07-0.6.1.0-ubuntu22.04-aarch64/mlnxofedinstall --force --dpdk --without-fw-update
+      cmd: /tmp/MLNX_OFED_LINUX-24.07-0.6.1.0-ubuntu22.04-aarch64/mlnxofedinstall --basic --with-mstflint --with-python3-pyverbs --force --without-fw-update
     when: mft_check.rc != 0
 
 
