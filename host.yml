@@ -2,6 +2,19 @@
 - hosts: localhost
   tasks:
 
+  - name: Get Jetson Model from /proc/device-tree/model
+    ansible.builtin.command: cat /proc/device-tree/model
+    register: jetson_model
+
+  - name: Check Orin Nano
+    ansible.builtin.set_fact:
+      jetson_board: "orin_nano"
+    when: "'Orin Nano Developer' in jetson_model.stdout"
+
+  - name: Check Orin Nano NX
+    ansible.builtin.set_fact:
+      jetson_board: "orin_nx"
+    when: "'Orin NX' in jetson_model.stdout"
 
   - name: copy authorized_keys to root
     copy:
