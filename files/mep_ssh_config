@@ -1,0 +1,9 @@
+Host rfsoc_user
+ HostName 192.168.20.100
+ User xilinx
+ IdentityFile ~/.ssh/mep_key
+
+Host rfsoc_root
+ HostName 192.168.20.100
+ User root
+ IdentityFile ~/.ssh/mep_key
