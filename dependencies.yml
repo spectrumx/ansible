@@ -36,6 +36,7 @@
           - libcufft-dev-12-2 
           - libcusolver-dev-12-2 
           - libcurand-dev-12-2
+          - holoscan
       state: present
       update_cache: yes
 
