@@ -143,7 +143,9 @@
     copy:
       dest: /var/lib/nvpmodel/status
       content: "pmode:0003\n"
-    register: need_reboot
+    #register: need_reboot
+    #changed_when: need_reboot.changed
+
 
   handlers:
     - name: Save iptables

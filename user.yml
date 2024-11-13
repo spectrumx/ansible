@@ -88,7 +88,8 @@
         path: /var/lib/nvpmodel/status
         insertafter: '^\[core\]'
         line: 'sshCommand = "ssh -i ~/.ssh/git_key"'
-      register: need_reboot
+      #register: need_reboot
+      #changed_when: need_reboot.changed
 
     - name: chown /opt/mep-examples to mep
       file:
