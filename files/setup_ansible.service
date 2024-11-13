@@ -1,6 +1,6 @@
 [Unit]
 Description=Set up ansible for RadioHound platform
-After=network.target
+After=NetworkManager.target
 
 [Service]
 Type=oneshot

@@ -92,6 +92,7 @@ cp /home/rherban/ansible/run.py root/setup_ansible.py
 chmod 755 root/setup_ansible.py
 ln -s etc/systemd/system/setup_ansible.service etc/systemd/system/multi-user.target.wants/setup_ansible.service
 
+cd ..
 sudo ./tools/l4t_create_default_user.sh --accept-license -u mep -p <REDACTED> 
 
 
