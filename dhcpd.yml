@@ -25,6 +25,9 @@
       regexp: '^INTERFACESv4=""'
       line: 'INTERFACESv4="eth1"'
 
+  - name: Assign IP address to eth1 for RFSoC control
+    ansible.builtin.command:
+      cmd: ip addr add 192.168.20.1/24 dev eth1
 
   handlers:
     - name: restart dhcpd
