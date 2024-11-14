@@ -85,11 +85,9 @@
 
     - name: Add key to git repo
       lineinfile:
-        path: /var/lib/nvpmodel/status
+        path: /opt/mep-examples/.git/config
         insertafter: '^\[core\]'
         line: 'sshCommand = "ssh -i ~/.ssh/git_key"'
-      #register: need_reboot
-      #changed_when: need_reboot.changed
 
     - name: chown /opt/mep-examples to mep
       file:

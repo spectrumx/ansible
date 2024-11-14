@@ -112,6 +112,12 @@
       become: yes
       become_user: icarus
 
+    - name: Add key to git repo
+      lineinfile:
+        path: /opt/radiohound/icarus/.git/config
+        insertafter: '^\[core\]'
+        line: 'sshCommand = "ssh -i /opt/radiohound/.ssh/id_rsa"'
+
 
     # - name: checkout latest tag
     #   git:
