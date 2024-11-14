@@ -142,21 +142,21 @@
 
   - name: Check if dpdk is installed
     ansible.builtin.command:
-      cmd: dpkg-query -W -f='${Status}' dpdk-for-jetson
+      cmd: dpkg-query -W -f='${Version}' dpdk-for-jetson
     register: dpdk_check
     ignore_errors: yes
 
   - name: Download dpdk
     ansible.builtin.command:
-      cmd: wget https://github.com/spectrumx/ansible/releases/download/deps-20241112/dpdk-for-jetson_22.11.6-1_arm64.deb -O /tmp/dpdk-for-jetson_22.11.6-1_arm64.deb
+      cmd: wget https://github.com/spectrumx/ansible/releases/download/deps-20241112/dpdk-for-jetson_22.11.6-1ubuntu2_arm64.deb -O /tmp/dpdk-for-jetson_22.11.6-1ubuntu2_arm64.deb
       warn: false
-    when: dpdk_check.rc != 0
+    when: dpdk_check.stdout != "22.11.6-1ubuntu2"
 
   - name: Install dpdk
     apt:
-      deb: /tmp/dpdk-for-jetson_22.11.6-1_arm64.deb
+      deb: /tmp/dpdk-for-jetson_22.11.6-1ubuntu2_arm64.deb
       state: present
-    when: dpdk_check.rc != 0
+    when: dpdk_check.stdout != "22.11.6-1ubuntu2"
 
   - name: Install holohub
     command:
