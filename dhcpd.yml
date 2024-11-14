@@ -28,6 +28,7 @@
   - name: Assign IP address to eth1 for RFSoC control
     ansible.builtin.command:
       cmd: ip addr add 192.168.20.1/24 dev eth1
+    ignore_errors: yes
 
   handlers:
     - name: restart dhcpd
