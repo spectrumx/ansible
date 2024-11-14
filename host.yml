@@ -24,16 +24,15 @@
       owner: root
       group: root
 
-  - name: Fix Ethernet Mac Addresses
-    shell: ip -o link show | awk -F': ' '{print $2}' | grep eth
-    register: interfaces
-
   - name: Set MAC address for each interface
     shell: ifconfig {{ item }} hw ether $(ethtool -P {{ item }} | awk '{print $3}')
-    with_items: "{{ interfaces.stdout_lines }}"
+    ignore_errors: yes
+    loop:
+      - "eth0"
+      - "eth1"
+      - "eth2"
 
   - name: Get new hostname
-    #shell: cat /sys/class/net/$(ls /sys/class/net | grep -E '^e' | head -n 1)/address | sed -e 's/://g' | cut -c 9-12
     shell: cat /sys/class/net/eth1/address | sed -e 's/://g' | cut -c 9-12
     register: new_hostname
     changed_when: False
