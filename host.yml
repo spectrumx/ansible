@@ -24,19 +24,19 @@
       owner: root
       group: root
 
-  # - name: Fix Ethernet Mac Addresses
-  #   command: ip -o link show | awk -F': ' '{print $2}' | grep eth
-  #   register: interfaces
+  - name: Fix Ethernet Mac Addresses
+    shell: ip -o link show | awk -F': ' '{print $2}' | grep eth
+    register: interfaces
 
-  # - name: Set MAC address for each interface
-  #   shell: ifconfig {{ item }} hw ether $(ethtool -P {{ item }} | awk '{print $3}')
-  #   with_items: "{{ interfaces.stdout_lines }}"
+  - name: Set MAC address for each interface
+    shell: ifconfig {{ item }} hw ether $(ethtool -P {{ item }} | awk '{print $3}')
+    with_items: "{{ interfaces.stdout_lines }}"
 
-  # - name: Get new hostname
-  #   #shell: cat /sys/class/net/$(ls /sys/class/net | grep -E '^e' | head -n 1)/address | sed -e 's/://g' | cut -c 9-12
-  #   shell: cat /sys/class/net/eth1/address | sed -e 's/://g' | cut -c 9-12
-  #   register: new_hostname
-  #   changed_when: False
+  - name: Get new hostname
+    #shell: cat /sys/class/net/$(ls /sys/class/net | grep -E '^e' | head -n 1)/address | sed -e 's/://g' | cut -c 9-12
+    shell: cat /sys/class/net/eth1/address | sed -e 's/://g' | cut -c 9-12
+    register: new_hostname
+    changed_when: False
 
   - name: Update hostname (systemd)
     hostname:
@@ -127,12 +127,12 @@
     notify:
       - Restart networking
 
-  - name: Append kernel boot args
-    ansible.builtin.lineinfile:
-      path: /boot/extlinux/extlinux.conf
-      regexp: 'APPEND'
-      line: '\g<0> isolcpus=1-2 nohz_full=1-2 irqaffinity=0,3-N rcu_nocbs=1-2 rcu_nocb_poll tsc=reliable audit=0 nosoftlockup default_hugepagesz=1G hugepagesz=1G hugepages=2'
-      backrefs: yes
+  - name: Set kernel boot args
+    copy:
+      src: files/extlinux.conf
+      dest: /boot/extlinux/extlinux.conf
+      owner: root
+      group: root
 
   - name: Create udev rule file
     copy:
