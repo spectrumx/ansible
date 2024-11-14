@@ -98,6 +98,20 @@
     notify:
       - Restart networking
 
+  - name: Check if eth0 has the IP address 192.168.4.1
+    command:
+      cmd: ip addr show dev eth0
+    ignore_errors: yes
+    register: eth0_output
+
+  - name: Add IP address to eth0 if not present
+    command:
+      cmd: ip addr add 192.168.4.1/24 dev eth0
+    when: "'192.168.4.1' not in eth0_output.stdout"
+    ignore_errors: yes
+    notify:
+      - Restart networking
+
   - name: Check if eth1 has the IP address 192.168.20.1
     command:
       cmd: ip addr show dev eth1
