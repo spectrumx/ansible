@@ -64,7 +64,7 @@
         state: directory
         owner: mep
         group: mep
-        mode: 777
+        mode: 0777
 
     - name: Add user to sudoers
       lineinfile:
