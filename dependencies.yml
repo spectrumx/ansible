@@ -128,7 +128,7 @@
     git:
       repo: 'https://github.com/ryanvolz/holohub.git'
       dest: /opt/holohub
-      update: no
+      update: yes
       version: "mep"
       accept_hostkey: yes
     register: run_holohub_setup

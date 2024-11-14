@@ -1,7 +1,7 @@
 ---
 - import_playbook: ansible-pull.yml # cron job to run regularly
-- import_playbook: dependencies.yml # required packages
 - import_playbook: host.yml         # misc host settings (hostname)
+- import_playbook: dependencies.yml # required packages
 - import_playbook: dhcpd.yml        # Install DHCP server for RFSoC
 - import_playbook: gpsd.yml         # Install GPS server
 - import_playbook: user.yml         # user for student workshop
