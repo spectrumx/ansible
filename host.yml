@@ -91,9 +91,9 @@
     command: ethtool -G eth2 rx 8192 tx 8192
     ignore_errors: yes
 
-  - name: Set MTU to 9000 on eth2
+  - name: Set MTU to 9000 on eth0
     command:
-      cmd: ip link set dev eth2 mtu 9000
+      cmd: ip link set dev eth0 mtu 9000
     ignore_errors: yes
     notify:
       - Restart networking
