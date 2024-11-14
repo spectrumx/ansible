@@ -104,11 +104,28 @@
     ignore_errors: yes
     register: eth0_output
 
-  - name: Add IP address to eth0 if not present
-    command:
-      cmd: ip addr add 192.168.4.1/24 dev eth0
+  - name: Add a new connection for eth0
+    command: nmcli con add type ethernet ifname eth0 con-name eth0-connection
     when: "'192.168.4.1' not in eth0_output.stdout"
+
+  - name: Set IP address for eth0
+    command: nmcli con mod eth0-connection ipv4.addresses "192.168.4.1/24"
     ignore_errors: yes
+    when: "'192.168.4.1' not in eth0_output.stdout"
+    notify:
+      - Restart networking
+
+  - name: Set IP method to manual
+    command: nmcli con mod eth0-connection ipv4.method manual
+    ignore_errors: yes
+    when: "'192.168.4.1' not in eth0_output.stdout"
+    notify:
+      - Restart networking
+
+  - name: Bring up the connection
+    command: nmcli con up eth0-connection
+    ignore_errors: yes
+    when: "'192.168.4.1' not in eth0_output.stdout"
     notify:
       - Restart networking
 
@@ -118,25 +135,27 @@
     ignore_errors: yes
     register: eth1_output
 
-  - name: Add IP address to eth1 if not present
-    command:
-      cmd: ip addr add 192.168.20.1/24 dev eth1
-    when: "'192.168.20.1' not in eth1_output.stdout"
+  - name: Add a new connection for eth0
+    command: nmcli con add type ethernet ifname eth0 con-name eth0-connection
+
+  - name: Set IP address for eth1
+    command: nmcli con mod eth1-connection ipv4.addresses "192.168.20.1/24"
     ignore_errors: yes
+    when: "'192.168.20.1' not in eth1_output.stdout"
     notify:
       - Restart networking
 
-  - name: Check if eth2 has the IP address 192.168.20.1
-    command:
-      cmd: ip addr show dev eth2
+  - name: Set IP method to manual
+    command: nmcli con mod eth1-connection ipv4.method manual
     ignore_errors: yes
-    register: eth2_output
+    when: "'192.168.20.1' not in eth1_output.stdout"
+    notify:
+      - Restart networking
 
-  - name: Set static IP on eth2
-    command:
-      cmd: ip addr add 192.168.4.1/24 dev eth2
-    when: "'192.168.4.1' not in eth2_output.stdout"
+  - name: Bring up the connection
+    command: nmcli con up eth1-connection
     ignore_errors: yes
+    when: "'192.168.20.1' not in eth1_output.stdout"
     notify:
       - Restart networking
 
@@ -146,20 +165,6 @@
       dest: /boot/extlinux/extlinux.conf
       owner: root
       group: root
-
-  - name: Create udev rule file
-    copy:
-      dest: /etc/udev/rules.d/70-persistent-net.rules
-      content: |
-        SUBSYSTEM=="net", ACTION=="add", ATTR{altname}=="enP1p1s0", NAME="eth0"
-        SUBSYSTEM=="net", ACTION=="add", ATTR{altname}=="enP8p1s0", NAME="eth1"
-        SUBSYSTEM=="net", ACTION=="add", ATTR{altname}=="enP4p1s0np0", NAME="eth2"
-
-  - name: Reload udev rules
-    command: udevadm control --reload-rules
-
-  - name: Trigger udev rules
-    command: udevadm trigger --type=devices --action=add
 
   - name: Set power mode
     copy:
