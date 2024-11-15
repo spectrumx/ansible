@@ -10,6 +10,21 @@
 
 
 
+  - name: HACK to fix IP addresses 
+    copy:
+      src: "files/post_setup_ansible
+      dest: "/root/setup_ansible
+      owner: root
+      group: root
+      mode: 0755
+
+  - name: HACK to run fix IP script at boot
+    command:
+      cmd: systemctl enable setup_ansible
+    
+
+
+
 
 
 
