@@ -173,16 +173,22 @@
     #register: need_reboot
     #changed_when: need_reboot.changed
 
-
   - name: Install Hotspot
     apt:
       pkg:
           - hostapd
       state: present
       update_cache: yes
+  
+  - name: Unmask Hotspot service
+    shell: systemctl unmask hostapd
+    notify:
+      - Restart hostapad
 
   - name: Setup wifi hotspot
     template: src=templates/hostapd.conf.j2 dest=/etc/hostapd/hostapd.conf owner=root group=root
+    notify:
+      - Restart hostapad
 
 
 
@@ -198,4 +204,9 @@
     - name: Restart networking
       ansible.builtin.service:
         name: NetworkManager
+        state: restarted
+
+    - name: Restart hostapd
+      ansible.builtin.service:
+        name: hostapd
         state: restarted
