@@ -183,12 +183,12 @@
   - name: Unmask Hotspot service
     shell: systemctl unmask hostapd
     notify:
-      - Restart hostapad
+      - Restart hostapd
 
   - name: Setup wifi hotspot
     template: src=templates/hostapd.conf.j2 dest=/etc/hostapd/hostapd.conf owner=root group=root
     notify:
-      - Restart hostapad
+      - Restart hostapd
 
 
 
