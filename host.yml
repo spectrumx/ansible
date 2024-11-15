@@ -159,6 +159,37 @@
     notify:
       - Restart networking
 
+
+  - name: Check if wlan0 has the IP address 192.168.44.1
+    command:
+      cmd: ip addr show dev wlan0
+    ignore_errors: yes
+    register: wlan0_output
+
+  - name: Add a new connection for wlan0
+    command: nmcli con add type ethernet ifname wlan0 con-name wlan0-connection
+
+  - name: Set IP address for wlan0
+    command: nmcli con mod wlan0-connection ipv4.addresses "192.168.44.1/24"
+    ignore_errors: yes
+    when: "'192.168.44.1' not in wlan0_output.stdout"
+    notify:
+      - Restart networking
+
+  - name: Set IP method to manual
+    command: nmcli con mod wlan0-connection ipv4.method manual
+    ignore_errors: yes
+    when: "'192.168.44.1' not in wlan0_output.stdout"
+    notify:
+      - Restart networking
+
+  - name: Bring up the connection
+    command: nmcli con up wlan0-connection
+    ignore_errors: yes
+    when: "'192.168.44.1' not in wlan0_output.stdout"
+    notify:
+      - Restart networking
+
   - name: Set kernel boot args
     copy:
       src: files/extlinux.conf
