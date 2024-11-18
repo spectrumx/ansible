@@ -87,7 +87,7 @@
       lineinfile:
         path: /opt/mep-examples/.git/config
         insertafter: '^\[core\]'
-        line: 'sshCommand = "ssh -i ~/.ssh/git_key"'
+        line: ' sshCommand = "ssh -i ~/.ssh/git_key"'
 
     - name: chown /opt/mep-examples to mep
       file:
