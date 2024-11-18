@@ -1,0 +1,152 @@
+---
+- hosts: localhost
+  tasks:
+
+  - name: Check if Intel Wifi repo is cloned
+    stat:
+      path: /opt/linux-firmware
+    register: checkout_intel_wifi
+
+  - name: Clone the Intel 8265 WIFI drivers repository
+    git:
+      repo: 'https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git'
+      dest: /opt/linux-firmware
+      update: no
+    when: checkout_intel_wifi
+
+  - name: Copy iwl-8265-34 file to /lib/firmware
+    copy:
+      src: /opt/linux-firmware/iwlwifi-8265-34.ucode
+      dest: /lib/firmware/
+      mode: '0644'
+
+  - name: Copy iwl-8265-36 file to /lib/firmware
+    copy:
+      src: /opt/linux-firmware/iwlwifi-8265-36.ucode
+      dest: /lib/firmware/
+      mode: '0644'
+
+
+  - name: Check if wlan0 has the IP address 192.168.44.1
+    command:
+      cmd: ip addr show dev wlan0
+    ignore_errors: yes
+    register: wlan0_output
+
+  - name: Add a new connection for wlan0
+    command: nmcli con add type ethernet ifname wlan0 con-name wlan0-connection
+
+  - name: Set IP address for wlan0
+    command: nmcli con mod wlan0-connection ipv4.addresses "192.168.44.1/24"
+    ignore_errors: yes
+    when: "'192.168.44.1' not in wlan0_output.stdout"
+    notify:
+      - Restart networking
+
+  - name: Set IP method to manual
+    command: nmcli con mod wlan0-connection ipv4.method manual
+    ignore_errors: yes
+    when: "'192.168.44.1' not in wlan0_output.stdout"
+    notify:
+      - Restart networking
+
+  - name: Bring up the connection
+    command: nmcli con up wlan0-connection
+    ignore_errors: yes
+    when: "'192.168.44.1' not in wlan0_output.stdout"
+    notify:
+      - Restart networking
+
+  - name: Set kernel boot args
+    copy:
+      src: files/extlinux.conf
+      dest: /boot/extlinux/extlinux.conf
+      owner: root
+      group: root
+
+  - name: Set power mode
+    copy:
+      dest: /var/lib/nvpmodel/status
+      content: "pmode:0003\n"
+    #register: need_reboot
+    #changed_when: need_reboot.changed
+
+
+  - name: Install Hotspot
+    apt:
+      pkg:
+          - hostapd
+      state: present
+      update_cache: yes
+  
+  - name: Unmask Hotspot service
+    shell: systemctl unmask hostapd
+    notify:
+      - Restart hostapd
+
+  - name: Setup wifi hotspot
+    template: src=templates/hostapd.conf.j2 dest=/etc/hostapd/hostapd.conf owner=root group=root
+    notify:
+      - Restart hostapd
+
+
+
+#mellanox: enP4p1s0np0
+  - name: Check for Mellanox network card
+    command: lshw -class network
+    register: net_devices
+
+
+  - name: Set interface names and IP addresses
+    set_fact:
+      interface_config: |
+        network:
+          version: 2
+          renderer: networkd
+          ethernets:
+            eth0:
+              dhcp4: yes
+            enP8p1s0:
+              addresses:
+                - 192.168.20.1/24
+            enP4p1s0np0:
+              addresses:
+                - 192.168.4.1/24
+
+
+  - name: Configure Netplan
+    copy:
+      dest: /etc/netplan/01-netcfg.yaml
+      content: "{{ interface_config }}"
+    notify: Apply Netplan Configuration
+
+
+
+
+
+
+
+
+
+
+  handlers:
+    - name: Save iptables
+      command: /sbin/service iptables save
+      when: ansible_os_family == "RedHat"
+
+    - name: Save iptables
+      command: /sbin/iptables-save
+      when: ansible_os_family == "Debian"
+
+    - name: Restart networking
+      ansible.builtin.service:
+        name: NetworkManager
+        state: restarted
+
+    - name: Restart hostapd
+      ansible.builtin.service:
+        name: hostapd
+        state: restarted
+
+    - name: Apply Netplan Configuration
+      command: netplan apply

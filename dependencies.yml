@@ -94,35 +94,13 @@
       warn: false
     when: mft_check.rc != 0
 
-  - name: Install the .deb package
+  - name: Install the Mellanox Drivers
     command:
       cmd: /tmp/MLNX_OFED_LINUX-24.07-0.6.1.0-ubuntu22.04-aarch64/mlnxofedinstall --basic --with-mstflint --with-python3-pyverbs --force --without-fw-update
     when: mft_check.rc != 0
 
 
-  - name: Check if Intel Wifi repo is cloned
-    stat:
-      path: /opt/linux-firmware
-    register: checkout_intel_wifi
 
-  - name: Clone the Intel 8265 WIFI drivers repository
-    git:
-      repo: 'https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git'
-      dest: /opt/linux-firmware
-      update: no
-    when: checkout_intel_wifi
-
-  - name: Copy iwl-8265-34 file to /lib/firmware
-    copy:
-      src: /opt/linux-firmware/iwlwifi-8265-34.ucode
-      dest: /lib/firmware/
-      mode: '0644'
-
-  - name: Copy iwl-8265-36 file to /lib/firmware
-    copy:
-      src: /opt/linux-firmware/iwlwifi-8265-36.ucode
-      dest: /lib/firmware/
-      mode: '0644'
 
   - name: Clone holohub repository
     git:

@@ -98,15 +98,23 @@
     notify:
       - Restart networking
 
+###### eth0 ######
+
   - name: Check if eth0 has the IP address 192.168.4.1
     command:
       cmd: ip addr show dev eth0
     ignore_errors: yes
     register: eth0_output
 
+
+  - name: Check for eth0-connection
+    command: nmcli connection show
+    when: "'192.168.4.1' not in eth0_output.stdout"
+    register: eth0_connection
+
   - name: Add a new connection for eth0
     command: nmcli con add type ethernet ifname eth0 con-name eth0-connection
-    when: "'192.168.4.1' not in eth0_output.stdout"
+    when: "'192.168.4.1' not in eth0_output.stdout and 'eth0-connection' not in eth0_connection"
 
   - name: Set IP address for eth0
     command: nmcli con mod eth0-connection ipv4.addresses "192.168.4.1/24"
@@ -204,22 +212,41 @@
     #register: need_reboot
     #changed_when: need_reboot.changed
 
-  - name: Install Hotspot
-    apt:
-      pkg:
-          - hostapd
-      state: present
-      update_cache: yes
-  
-  - name: Unmask Hotspot service
-    shell: systemctl unmask hostapd
-    notify:
-      - Restart hostapd
+# #mellanox: enP4p1s0np0
+#   - name: Check for Mellanox network card
+#     command: lshw -class network
+#     register: net_devices
 
-  - name: Setup wifi hotspot
-    template: src=templates/hostapd.conf.j2 dest=/etc/hostapd/hostapd.conf owner=root group=root
-    notify:
-      - Restart hostapd
+
+#   - name: Set interface names and IP addresses
+#     set_fact:
+#       interface_config: |
+#         network:
+#           version: 2
+#           renderer: networkd
+#           ethernets:
+#             eth0:
+#               dhcp4: yes
+#             enP8p1s0:
+#               addresses:
+#                 - 192.168.20.1/24
+#             enP4p1s0np0:
+#               addresses:
+#                 - 192.168.4.1/24
+
+
+#   - name: Configure Netplan
+#     copy:
+#       dest: /etc/netplan/01-netcfg.yaml
+#       content: "{{ interface_config }}"
+#     notify: Apply Netplan Configuration
+
+
+
+
+
+
+
 
 
 
@@ -241,3 +268,6 @@
       ansible.builtin.service:
         name: hostapd
         state: restarted
+
+    - name: Apply Netplan Configuration
+      command: netplan apply
