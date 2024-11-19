@@ -91,15 +91,18 @@
         owner: mep
         group: mep
         mode: 0775
+        recurse: yes
 
     - name: Add key to mep-examples repo
-      shell:  git -C /opt/mep-examples config core.sshCommand "ssh -i /home/mep/.ssh/id_rsa"
+      shell: GIT_DIR=/opt/mep-examples/.git GIT_WORK_TREE=/opt/mep-examples git config core.sshCommand "ssh -i /home/mep/.ssh/id_rsa"
+      args:
+        chdir: /opt/mep-examples
       when: not git_clone_mep_examples.before
       become: yes
       become_user: mep
 
     - name: Add git safe.directory to mep-examples repo
-      shell:  git -C /opt/mep-examples config --add safe.directory "/opt/mep-examples"
+      shell: GIT_DIR=/opt/mep-examples/.git GIT_WORK_TREE=/opt/mep-examples git config --add safe.directory /opt/mep-examples
       when: not git_clone_mep_examples.before
       become: yes
       become_user: mep
