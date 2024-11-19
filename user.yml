@@ -82,12 +82,7 @@
         update: no
         key_file: /opt/radiohound/.ssh/id_rsa
         accept_hostkey: yes
-
-    - name: Add key to git repo
-      lineinfile:
-        path: /opt/mep-examples/.git/config
-        insertafter: '^\[core\]'
-        line: ' sshCommand = "ssh -i ~/.ssh/git_key"'
+      register: git_clone_mep_examples
 
     - name: chown /opt/mep-examples to mep
       file:
@@ -96,6 +91,18 @@
         owner: mep
         group: mep
         mode: 0775
+
+    - name: Add key to mep-examples repo
+      shell:  git -C /opt/mep-examples config core.sshCommand "ssh -i /home/mep/.ssh/id_rsa"
+      when: not git_clone_mep_examples.before
+      become: yes
+      become_user: mep
+
+    - name: Add git safe.directory to mep-examples repo
+      shell:  git -C /opt/mep-examples config -add safe.directory "/opt/mep-examples"
+      when: not git_clone_mep_examples.before
+      become: yes
+      become_user: mep
 
     - name: Install xrdp
       shell: "files/xrdp-installer-1.4.6.sh"

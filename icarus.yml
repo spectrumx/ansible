@@ -77,12 +77,6 @@
         owner: icarus
         group: icarus
 
-    - name: Add git safe directory
-      command: git config -f /etc/gitconfig --add safe.directory /opt/radiohound/icarus
-      become: yes
-      become_user: root
-
-
     - name: clone icarus repository
       git:
         repo: git@github.com:ndwireless/icarus.git
@@ -90,7 +84,7 @@
         update: no
         key_file: /home/icarus/.ssh/id_rsa
         accept_hostkey: yes
-      register: git_clone
+      register: git_clone_icarus
       become: yes
       become_user: icarus
 
@@ -98,7 +92,7 @@
       shell: "git describe --tags `git rev-list --tags --max-count=1`"
       args:
         chdir: /opt/radiohound/icarus
-      when: not git_clone.before
+      when: not git_clone_icarus.before
       register: git_latest_tag
       become_user: icarus
 
@@ -108,15 +102,21 @@
         dest: /opt/radiohound/icarus
         update: yes
         version: "dev"
-      when: not git_clone.before
+      when: not git_clone_icarus.before
       become: yes
       become_user: icarus
 
-    - name: Add key to git repo
-      lineinfile:
-        path: /opt/radiohound/icarus/.git/config
-        insertafter: '^\[core\]'
-        line: 'sshCommand = "ssh -i /opt/radiohound/.ssh/id_rsa"'
+    - name: Add key to icarus repo
+      shell:  git -C /opt/radiohound/icarus config core.sshCommand "ssh -i /opt/radiohound/.ssh/id_rsa"
+      when: not git_clone_icarus.before
+      become: yes
+      become_user: icarus
+
+    - name: Add git safe.directory to icarus repo
+      shell:  git -C /opt/radiohound/icarus config -add safe.directory /opt/radiohound/icarus
+      when: not git_clone_icarus.before
+      become: yes
+      become_user: icarus
 
 
     # - name: checkout latest tag
@@ -125,7 +125,7 @@
     #     dest: /opt/radiohound/icarus
     #     update: yes
     #     version: "{{git_latest_tag.stdout}}"
-    #   when: not git_clone.before
+    #   when: not git_clone_icarus.before
     #   become: yes
     #   become_user: icarus
 
