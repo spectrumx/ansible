@@ -91,34 +91,34 @@
 
 
 
-#mellanox: enP4p1s0np0
-  - name: Check for Mellanox network card
-    command: lshw -class network
-    register: net_devices
+# #mellanox: enP4p1s0np0
+#   - name: Check for Mellanox network card
+#     command: lshw -class network
+#     register: net_devices
 
 
-  - name: Set interface names and IP addresses
-    set_fact:
-      interface_config: |
-        network:
-          version: 2
-          renderer: networkd
-          ethernets:
-            eth0:
-              dhcp4: yes
-            enP8p1s0:
-              addresses:
-                - 192.168.20.1/24
-            enP4p1s0np0:
-              addresses:
-                - 192.168.4.1/24
+#   - name: Set interface names and IP addresses
+#     set_fact:
+#       interface_config: |
+#         network:
+#           version: 2
+#           renderer: networkd
+#           ethernets:
+#             eth0:
+#               dhcp4: yes
+#             enP8p1s0:
+#               addresses:
+#                 - 192.168.20.1/24
+#             enP4p1s0np0:
+#               addresses:
+#                 - 192.168.4.1/24
 
 
-  - name: Configure Netplan
-    copy:
-      dest: /etc/netplan/01-netcfg.yaml
-      content: "{{ interface_config }}"
-    notify: Apply Netplan Configuration
+#   - name: Configure Netplan
+#     copy:
+#       dest: /etc/netplan/01-netcfg.yaml
+#       content: "{{ interface_config }}"
+#     notify: Apply Netplan Configuration
 
 
 
