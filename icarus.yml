@@ -113,7 +113,7 @@
       become_user: icarus
 
     - name: Add git safe.directory to icarus repo
-      shell:  git -C /opt/radiohound/icarus config -add safe.directory /opt/radiohound/icarus
+      shell:  git -C /opt/radiohound/icarus config --add safe.directory /opt/radiohound/icarus
       when: not git_clone_icarus.before
       become: yes
       become_user: icarus

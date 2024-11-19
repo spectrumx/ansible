@@ -112,7 +112,7 @@
     register: run_holohub_setup
   
   - name: Add git safe.directory to holohub repo
-    shell:  git -C /opt/holohub config -add safe.directory "/opt/holohub"
+    shell:  git -C /opt/holohub config --add safe.directory "/opt/holohub"
     when: not run_holohub_setup.before
 
 

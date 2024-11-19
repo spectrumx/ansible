@@ -99,7 +99,7 @@
       become_user: mep
 
     - name: Add git safe.directory to mep-examples repo
-      shell:  git -C /opt/mep-examples config -add safe.directory "/opt/mep-examples"
+      shell:  git -C /opt/mep-examples config --add safe.directory "/opt/mep-examples"
       when: not git_clone_mep_examples.before
       become: yes
       become_user: mep
