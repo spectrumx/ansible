@@ -1,0 +1,40 @@
+# This file describes the network interfaces available on your system
+# and how to activate them. For more information, see interfaces(5).
+
+# Loopback network interface
+auto lo
+iface lo inet loopback
+
+# Eth* are the default interfaces, but have random mac addresses and aren't in stable order.  Use udev to force naming
+auto eth0
+iface eth0 inet dhcp
+auto eth1
+iface eth1 inet dhcp
+
+# Primary network, left-most on-board port when looking at Jetson.  Has sticker on top.
+auto en0
+iface en0 inet dhcp
+
+# Secondary on-board NIC, used for RFSoC control
+auto en1
+iface en1 inet static
+    address 192.168.20.1
+    netmask 255.255.255.0
+    dns-nameservers 8.8.8.8 8.8.4.4
+
+# Mellanox NIC, used for RFSoC data
+auto en2
+iface en2 inet static
+    address 192.168.4.1
+    netmask 255.255.255.0
+    dns-nameservers 8.8.8.8 8.8.4.4
+    mtu 9000
+    post-up /sbin/ethtool -G en2 rx 8192 tx 8192
+
+
+# Wifi NIC, used for hotspot to access Jetson in the field
+auto wlan0
+iface wlan0 inet static
+    address 192.168.44.1
+    netmask 255.255.255.0
+    dns-nameservers 8.8.8.8 8.8.4.4

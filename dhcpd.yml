@@ -22,8 +22,8 @@
     lineinfile:
       path: /etc/default/isc-dhcp-server
       state: present
-      regexp: '^INTERFACESv4=""'
-      line: 'INTERFACESv4="eth1 wlan0"'
+      regexp: '^INTERFACESv4='
+      line: 'INTERFACESv4="en1 wlan0"'
 
   handlers:
     - name: restart dhcpd

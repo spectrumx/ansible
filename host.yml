@@ -24,24 +24,64 @@
       owner: root
       group: root
 
-  - name: Set MAC address for each interface
-    shell: ifconfig {{ item }} hw ether $(ethtool -P {{ item }} | awk '{print $3}')
-    ignore_errors: yes
-    loop:
-      - "eth0"
-      - "eth1"
-      - "eth2"
+  - name: Remove Ubuntu's Network Manager 
+    apt:
+      pkg:
+          - network-manager
+      state: absent
+      update_cache: no
 
-  - name: Get new hostname
+  - name: copy udev 70-persistent-net.rules
+    copy:
+      src: "files/70-persistent-net.rules"
+      dest: /etc/udev/rules.d/70-persistent-net.rules
+      mode: 0755
+      owner: root
+      group: root
+
+  - name: copy /etc/network/interfaces 
+    copy:
+      src: "files/interfaces"
+      dest: /etc/network/interfaces
+      mode: 0755
+      owner: root
+      group: root
+
+  - name: Allow udev to set interface names
+    lineinfile:
+      path: /usr/lib/systemd/network/99-default.link
+      state: present
+      regexp: '^NamePolicy=keep'
+      line: 'NamePolicy=database keep kernel onboard slot path'
+
+  - name: Check if eth1 exists (first boot only)
+    shell: ifconfig
+    register: network_interfaces
+
+  - name: Set MAC address for each interface
+    shell: ifconfig eth1 hw ether $(ethtool -P eth1 | awk '{print $3}')
+    when: "'eth1' in network_interfaces.stdout"
+    ignore_errors: yes
+
+  - name: Set hostname based on eth1
     shell: cat /sys/class/net/eth1/address | sed -e 's/://g' | cut -c 9-12
+    when: "'eth1' in network_interfaces.stdout"
+    register: new_hostname
+    changed_when: False
+
+  - name: Set hostname based on en0
+    shell: cat /sys/class/net/en0/address | sed -e 's/://g' | cut -c 9-12
+    when: "'en0' in network_interfaces.stdout"
     register: new_hostname
     changed_when: False
 
   - name: Update hostname (systemd)
     hostname:
       name: "{{ new_hostname.stdout }}"
+    when: new_hostname
 
   - copy: content="{{ new_hostname.stdout }}" dest=/etc/hostname
+    when: new_hostname
 
 
 
@@ -50,26 +90,29 @@
     iptables:
       table: nat
       chain: POSTROUTING
-      out_interface: eth0
+      out_interface: en0
       jump: MASQUERADE
+    when: "'en0' in network_interfaces.stdout"
     notify: Save iptables
 
   - name: Add FORWARD rule for RELATED,ESTABLISHED state
     iptables:
       chain: FORWARD
-      in_interface: eth0
-      out_interface: eth1
+      in_interface: en0
+      out_interface: en1
       match: state
       ctstate: RELATED,ESTABLISHED
       jump: ACCEPT
+    when: "'en0' in network_interfaces.stdout"
     notify: Save iptables
 
-  - name: Add FORWARD rule to allow traffic from eth1 to eth0
+  - name: Add FORWARD rule to allow traffic from rfsoc to internet
     iptables:
       chain: FORWARD
-      in_interface: eth1
-      out_interface: eth0
+      in_interface: en1
+      out_interface: en0
       jump: ACCEPT
+    when: "'en0' in network_interfaces.stdout"
     notify: Save iptables
 
   - name: Ensure sysctl.conf has the correct values
@@ -87,116 +130,86 @@
   - name: Apply sysctl settings
     command: sysctl -p
 
-  - name: Set ethtool ring buffer sizes
-    command: ethtool -G eth2 rx 8192 tx 8192
-    ignore_errors: yes
+  # - name: Set ethtool ring buffer sizes
+  #   command: ethtool -G eth2 rx 8192 tx 8192
+  #   ignore_errors: yes
 
-  - name: Set MTU to 9000 on eth0
-    command:
-      cmd: ip link set dev eth0 mtu 9000
-    ignore_errors: yes
-    notify:
-      - Restart networking
+  # - name: Set MTU to 9000 on eth0
+  #   command:
+  #     cmd: ip link set dev eth0 mtu 9000
+  #   ignore_errors: yes
+  #   notify:
+  #     - Restart networking
 
 ###### eth0 ######
 
-  - name: Check if eth0 has the IP address 192.168.4.1
-    command:
-      cmd: ip addr show dev eth0
-    ignore_errors: yes
-    register: eth0_output
+  # - name: Check if eth0 has the IP address 192.168.4.1
+  #   command:
+  #     cmd: ip addr show dev eth0
+  #   ignore_errors: yes
+  #   register: eth0_output
 
 
-  - name: Check for eth0-connection
-    command: nmcli connection show
-    when: "'192.168.4.1' not in eth0_output.stdout"
-    register: eth0_connection
+  # - name: Check for eth0-connection
+  #   command: nmcli connection show
+  #   when: "'192.168.4.1' not in eth0_output.stdout"
+  #   register: eth0_connection
 
-  - name: Add a new connection for eth0
-    command: nmcli con add type ethernet ifname eth0 con-name eth0-connection
-    when: "'192.168.4.1' not in eth0_output.stdout and 'eth0-connection' not in eth0_connection"
+  # - name: Add a new connection for eth0
+  #   command: nmcli con add type ethernet ifname eth0 con-name eth0-connection
+  #   when: "'192.168.4.1' not in eth0_output.stdout and 'eth0-connection' not in eth0_connection"
 
-  - name: Set IP address for eth0
-    command: nmcli con mod eth0-connection ipv4.addresses "192.168.4.1/24"
-    ignore_errors: yes
-    when: "'192.168.4.1' not in eth0_output.stdout"
-    notify:
-      - Restart networking
+  # - name: Set IP address for eth0
+  #   command: nmcli con mod eth0-connection ipv4.addresses "192.168.4.1/24"
+  #   ignore_errors: yes
+  #   when: "'192.168.4.1' not in eth0_output.stdout"
+  #   notify:
+  #     - Restart networking
 
-  - name: Set IP method to manual
-    command: nmcli con mod eth0-connection ipv4.method manual
-    ignore_errors: yes
-    when: "'192.168.4.1' not in eth0_output.stdout"
-    notify:
-      - Restart networking
+  # - name: Set IP method to manual
+  #   command: nmcli con mod eth0-connection ipv4.method manual
+  #   ignore_errors: yes
+  #   when: "'192.168.4.1' not in eth0_output.stdout"
+  #   notify:
+  #     - Restart networking
 
-  - name: Bring up the connection
-    command: nmcli con up eth0-connection
-    ignore_errors: yes
-    when: "'192.168.4.1' not in eth0_output.stdout"
-    notify:
-      - Restart networking
+  # - name: Bring up the connection
+  #   command: nmcli con up eth0-connection
+  #   ignore_errors: yes
+  #   when: "'192.168.4.1' not in eth0_output.stdout"
+  #   notify:
+  #     - Restart networking
 
-  - name: Check if eth1 has the IP address 192.168.20.1
-    command:
-      cmd: ip addr show dev eth1
-    ignore_errors: yes
-    register: eth1_output
+  # - name: Check if eth1 has the IP address 192.168.20.1
+  #   command:
+  #     cmd: ip addr show dev eth1
+  #   ignore_errors: yes
+  #   register: eth1_output
 
-  - name: Add a new connection for eth0
-    command: nmcli con add type ethernet ifname eth0 con-name eth0-connection
+  # - name: Add a new connection for eth0
+  #   command: nmcli con add type ethernet ifname eth0 con-name eth0-connection
 
-  - name: Set IP address for eth1
-    command: nmcli con mod eth1-connection ipv4.addresses "192.168.20.1/24"
-    ignore_errors: yes
-    when: "'192.168.20.1' not in eth1_output.stdout"
-    notify:
-      - Restart networking
+  # - name: Set IP address for eth1
+  #   command: nmcli con mod eth1-connection ipv4.addresses "192.168.20.1/24"
+  #   ignore_errors: yes
+  #   when: "'192.168.20.1' not in eth1_output.stdout"
+  #   notify:
+  #     - Restart networking
 
-  - name: Set IP method to manual
-    command: nmcli con mod eth1-connection ipv4.method manual
-    ignore_errors: yes
-    when: "'192.168.20.1' not in eth1_output.stdout"
-    notify:
-      - Restart networking
+  # - name: Set IP method to manual
+  #   command: nmcli con mod eth1-connection ipv4.method manual
+  #   ignore_errors: yes
+  #   when: "'192.168.20.1' not in eth1_output.stdout"
+  #   notify:
+  #     - Restart networking
 
-  - name: Bring up the connection
-    command: nmcli con up eth1-connection
-    ignore_errors: yes
-    when: "'192.168.20.1' not in eth1_output.stdout"
-    notify:
-      - Restart networking
+  # - name: Bring up the connection
+  #   command: nmcli con up eth1-connection
+  #   ignore_errors: yes
+  #   when: "'192.168.20.1' not in eth1_output.stdout"
+  #   notify:
+  #     - Restart networking
 
-
-  - name: Check if wlan0 has the IP address 192.168.44.1
-    command:
-      cmd: ip addr show dev wlan0
-    ignore_errors: yes
-    register: wlan0_output
-
-  - name: Add a new connection for wlan0
-    command: nmcli con add type ethernet ifname wlan0 con-name wlan0-connection
-
-  - name: Set IP address for wlan0
-    command: nmcli con mod wlan0-connection ipv4.addresses "192.168.44.1/24"
-    ignore_errors: yes
-    when: "'192.168.44.1' not in wlan0_output.stdout"
-    notify:
-      - Restart networking
-
-  - name: Set IP method to manual
-    command: nmcli con mod wlan0-connection ipv4.method manual
-    ignore_errors: yes
-    when: "'192.168.44.1' not in wlan0_output.stdout"
-    notify:
-      - Restart networking
-
-  - name: Bring up the connection
-    command: nmcli con up wlan0-connection
-    ignore_errors: yes
-    when: "'192.168.44.1' not in wlan0_output.stdout"
-    notify:
-      - Restart networking
 
   - name: Set kernel boot args
     copy:
@@ -209,41 +222,8 @@
     copy:
       dest: /var/lib/nvpmodel/status
       content: "pmode:0003\n"
-    #register: need_reboot
-    #changed_when: need_reboot.changed
-
-# #mellanox: enP4p1s0np0
-#   - name: Check for Mellanox network card
-#     command: lshw -class network
-#     register: net_devices
-
-
-#   - name: Set interface names and IP addresses
-#     set_fact:
-#       interface_config: |
-#         network:
-#           version: 2
-#           renderer: networkd
-#           ethernets:
-#             eth0:
-#               dhcp4: yes
-#             enP8p1s0:
-#               addresses:
-#                 - 192.168.20.1/24
-#             enP4p1s0np0:
-#               addresses:
-#                 - 192.168.4.1/24
-
-
-#   - name: Configure Netplan
-#     copy:
-#       dest: /etc/netplan/01-netcfg.yaml
-#       content: "{{ interface_config }}"
-#     notify: Apply Netplan Configuration
-
-
-
-
+    register: need_reboot
+    changed_when: need_reboot.changed
 
 
 
@@ -258,16 +238,3 @@
     - name: Save iptables
       command: /sbin/iptables-save
       when: ansible_os_family == "Debian"
-
-    - name: Restart networking
-      ansible.builtin.service:
-        name: NetworkManager
-        state: restarted
-
-    - name: Restart hostapd
-      ansible.builtin.service:
-        name: hostapd
-        state: restarted
-
-    - name: Apply Netplan Configuration
-      command: netplan apply
