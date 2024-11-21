@@ -54,7 +54,7 @@
       regexp: '^NamePolicy=keep'
       line: 'NamePolicy=database keep kernel onboard slot path'
 
-  - name: Check if eth1 exists (first boot only)
+  - name: Gather network interfaces 
     shell: ifconfig
     register: network_interfaces
 
@@ -63,27 +63,31 @@
     when: "'eth1' in network_interfaces.stdout"
     ignore_errors: yes
 
-  - name: Set hostname based on eth1
+  - name: Get hostname based on eth1
     shell: cat /sys/class/net/eth1/address | sed -e 's/://g' | cut -c 9-12
     when: "'eth1' in network_interfaces.stdout"
-    register: new_hostname
-    changed_when: False
+    register: eth1_hostname
 
-  - name: Set hostname based on en0
+  - name: Set hostname variable
+    set_fact:
+      hostname: "{{ eth1_hostname.stdout }}"
+    when: eth1_hostname is changed
+
+  - name: Get hostname based on en0
     shell: cat /sys/class/net/en0/address | sed -e 's/://g' | cut -c 9-12
     when: "'en0' in network_interfaces.stdout"
-    register: new_hostname
-    changed_when: False
+    register: en0_hostname
+
+  - name: Set hostname variable
+    set_fact:
+      hostname: "{{ en0_hostname.stdout }}"
+    when: en0_hostname is changed
 
   - name: Update hostname (systemd)
     hostname:
-      name: "{{ new_hostname.stdout }}"
-    when: new_hostname
+      name: "{{ hostname }}"
 
-  - copy: content="{{ new_hostname.stdout }}" dest=/etc/hostname
-    when: new_hostname
-
-
+  - copy: content="{{ hostname }}" dest=/etc/hostname
 
 
   - name: Add MASQUERADE rule to POSTROUTING chain
