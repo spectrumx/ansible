@@ -90,34 +90,12 @@
   - copy: content="{{ hostname }}" dest=/etc/hostname
 
 
-  - name: Add MASQUERADE rule to POSTROUTING chain
-    iptables:
-      table: nat
-      chain: POSTROUTING
-      out_interface: en0
-      jump: MASQUERADE
-    when: "'en0' in network_interfaces.stdout"
-    notify: Save iptables
+  - name: Setup firewall 
+    shell: |
+      iptables-legacy -t nat -A POSTROUTING -o en0 -j MASQUERADE
+      iptables-legacy -A FORWARD -i eth0 -o en1 -m state --state RELATED,ESTABLISHED -j ACCEPT
+      iptables-legacy -A FORWARD -i eth1 -o en0 -j ACCEPT
 
-  - name: Add FORWARD rule for RELATED,ESTABLISHED state
-    iptables:
-      chain: FORWARD
-      in_interface: en0
-      out_interface: en1
-      match: state
-      ctstate: RELATED,ESTABLISHED
-      jump: ACCEPT
-    when: "'en0' in network_interfaces.stdout"
-    notify: Save iptables
-
-  - name: Add FORWARD rule to allow traffic from rfsoc to internet
-    iptables:
-      chain: FORWARD
-      in_interface: en1
-      out_interface: en0
-      jump: ACCEPT
-    when: "'en0' in network_interfaces.stdout"
-    notify: Save iptables
 
   - name: Ensure sysctl.conf has the correct values
     lineinfile:
