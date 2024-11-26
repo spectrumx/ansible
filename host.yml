@@ -31,6 +31,13 @@
       state: absent
       update_cache: no
 
+  - name: Install ifupdown to manage network
+    apt:
+      pkg:
+          - ifupdown
+      state: present
+      update_cache: no
+
   - name: copy udev 70-persistent-net.rules
     copy:
       src: "files/70-persistent-net.rules"
