@@ -88,6 +88,18 @@
       become: yes
       become_user: icarus
 
+    - name: Add key to icarus repo
+      shell: GIT_DIR=/opt/radiohound/icarus/.git GIT_WORK_TREE=/opt/radiohound/icarus git config core.sshCommand "ssh -i /opt/radiohound/.ssh/id_rsa"
+      when: not git_clone_icarus.before
+      become: yes
+      become_user: icarus
+
+    - name: Add git safe.directory to icarus repo
+      shell: GIT_DIR=/opt/radiohound/icarus/.git GIT_WORK_TREE=/opt/radiohound/icaurs git config --add safe.directory /opt/radiohound/icarus
+      when: not git_clone_icarus.before
+      become: yes
+      become_user: icarus
+
     - name: get latest tag
       shell: "git describe --tags `git rev-list --tags --max-count=1`"
       args:
@@ -106,17 +118,6 @@
       become: yes
       become_user: icarus
 
-    - name: Add key to icarus repo
-      shell: GIT_DIR=/opt/radiohound/icarus/.git GIT_WORK_TREE=/opt/radiohound/icarus git config core.sshCommand "ssh -i /opt/radiohound/.ssh/id_rsa"
-      when: not git_clone_icarus.before
-      become: yes
-      become_user: icarus
-
-    - name: Add git safe.directory to icarus repo
-      shell: GIT_DIR=/opt/radiohound/icarus/.git GIT_WORK_TREE=/opt/radiohound/icaurs git config --add safe.directory /opt/radiohound/icarus
-      when: not git_clone_icarus.before
-      become: yes
-      become_user: icarus
 
 
     # - name: checkout latest tag
