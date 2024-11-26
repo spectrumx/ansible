@@ -70,6 +70,9 @@
     when: "'eth1' in network_interfaces.stdout"
     ignore_errors: yes
 
+  # We want to use the first on-board network's mac address as our unique ID,
+  # but the Jetpack deployment process was cloning eth0's mac to everyone
+  # Use eth1, but since we rename them via udev, also check for en0
   - name: Get hostname based on eth1
     shell: cat /sys/class/net/eth1/address | sed -e 's/://g' | cut -c 9-12
     when: "'eth1' in network_interfaces.stdout"
