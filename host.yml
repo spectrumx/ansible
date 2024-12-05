@@ -2,6 +2,16 @@
 - hosts: localhost
   tasks:
 
+  - name: Add key to ansible repo
+    shell: GIT_DIR=/opt/ansible/.git GIT_WORK_TREE=/opt/ansible git config core.sshCommand "ssh -i /opt/radiohound/.ssh/id_rsa"
+    become: yes
+    become_user: icarus
+
+  - name: Add git safe.directory to ansible repo
+    shell: GIT_DIR=/opt/ansible/.git GIT_WORK_TREE=/opt/ansible git config --add safe.directory /opt/ansible
+    become: yes
+    become_user: icarus
+
   - name: Get Jetson Model from /proc/device-tree/model
     ansible.builtin.command: cat /proc/device-tree/model
     register: jetson_model
