@@ -221,12 +221,17 @@
       owner: root
       group: root
 
+  - name: Check current power mode
+    stat:
+      path: /var/lib/nvpmodel/status
+    register: current_status
+
   - name: Set power mode
     copy:
       dest: /var/lib/nvpmodel/status
       content: "pmode:0003\n"
     register: need_reboot
-    changed_when: need_reboot.changed
+    changed_when: need_reboot.changed and current_status.stat.exists and "'pmode:0003\n' not in current_status.content"
 
 
 
