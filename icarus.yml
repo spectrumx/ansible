@@ -89,7 +89,7 @@
       become_user: icarus
 
     - name: Add key to icarus repo
-      shell: GIT_DIR=/opt/radiohound/icarus/.git GIT_WORK_TREE=/opt/radiohound/icarus git config core.sshCommand "ssh -i /opt/radiohound/.ssh/id_rsa"
+      shell: GIT_DIR=/opt/radiohound/icarus/.git GIT_WORK_TREE=/opt/radiohound/icarus git config core.sshCommand "ssh -i /home/icarus/.ssh/id_rsa"
       become: yes
       become_user: icarus
 
