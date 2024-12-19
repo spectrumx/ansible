@@ -72,7 +72,7 @@
 
     - name: create icarus directory
       file:
-        path: /opt/radiohound/icarus
+        path: /opt/radiohound
         state: directory
         owner: icarus
         group: icarus
