@@ -74,8 +74,8 @@
       file:
         path: /opt/radiohound
         state: directory
-        owner: icarus
-        group: icarus
+        owner: root
+        group: root
 
     - name: clone icarus repository
       git:
@@ -85,18 +85,12 @@
         key_file: /home/icarus/.ssh/id_rsa
         accept_hostkey: yes
       register: git_clone_icarus
-      become: yes
-      become_user: icarus
 
     - name: Add key to icarus repo
       shell: GIT_DIR=/opt/radiohound/icarus/.git GIT_WORK_TREE=/opt/radiohound/icarus git config core.sshCommand "ssh -i /home/icarus/.ssh/id_rsa"
-      become: yes
-      become_user: icarus
 
     - name: Add git safe.directory to icarus repo
       shell: GIT_DIR=/opt/radiohound/icarus/.git GIT_WORK_TREE=/opt/radiohound/icaurs git config --add safe.directory /opt/radiohound/icarus
-      become: yes
-      become_user: icarus
 
     - name: get latest tag
       shell: "git describe --tags `git rev-list --tags --max-count=1`"
@@ -104,7 +98,6 @@
         chdir: /opt/radiohound/icarus
       when: not git_clone_icarus.before
       register: git_latest_tag
-      become_user: icarus
 
     - name: checkout dev branch
       git:
@@ -113,8 +106,6 @@
         update: yes
         version: "dev"
       when: not git_clone_icarus.before
-      become: yes
-      become_user: icarus
 
 
 
@@ -161,8 +152,6 @@
         group: icarus
         state: link
 
-
-
     - name: copy icarus service
       copy:
         src: "files/icarus.service"
@@ -172,6 +161,13 @@
       notify:
         - systemctl reload
         - start icarus daemon
+
+
+
+
+
+
+
 
   handlers:
     - name: systemctl reload
