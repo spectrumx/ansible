@@ -13,8 +13,7 @@
     - name: Install Icarus Dependencies (Apt)
       apt:
         pkg:
-            - python3-pip 
-            - python3-venv
+            - python3.13-venv
             - netcat
             - autossh
             - mosquitto
@@ -25,7 +24,7 @@
         update_cache: no
 
     - name: Create a virtual environment
-      command: python3 -m venv /opt/radiohound/python313
+      command: python3.13 -m venv /opt/radiohound/python313
 
     - name: Install Icarus Dependencies (Pip)
       pip:
