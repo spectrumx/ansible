@@ -25,7 +25,7 @@
         update_cache: no
 
     - name: Create a virtual environment
-      command: python3 -m venv /opt/radiohound/venv
+      command: python3 -m venv /opt/radiohound/python313
 
     - name: Install Icarus Dependencies (Pip)
       pip:
@@ -42,8 +42,10 @@
           - PyVISA-py>=0.5.3
           - psutil>=6.0.0
           - gps>=3.19
+          - digital_rf
+          - spectrumx
         state: present
-        virtualenv: /opt/radiohound/venv
+        virtualenv: /opt/radiohound/python313
         virtualenv_python: python
 
 
