@@ -2,6 +2,24 @@
 - hosts: localhost
   tasks:
 
+  - name: Get GPG key for kitware repo (for cmake)
+    shell:  wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | sudo tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null
+
+
+  - name: Add deadsnakes PPA
+    apt_repository:
+      repo: ppa:deadsnakes/ppa
+      state: present
+
+  - name: Update apt cache
+    apt:
+      update_cache: yes
+
+  - name: Install Python 3.13
+    apt:
+      name: python3.13
+      state: present
+
   - name: Install Dependencies (Apt)
     apt:
       pkg:
@@ -23,7 +41,6 @@
           - telnet
           - iptables
           - python3-pip
-          - xrdp
           - cmake
           - xorg-dev
           - libboost-all-dev

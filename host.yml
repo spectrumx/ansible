@@ -43,6 +43,12 @@
           - ifupdown
       state: present
       update_cache: no
+    register: apt_result
+
+  - name: Register reboot if ifupdown got installed
+    set_fact:
+      need_reboot: "{{ apt_result }}"
+    when: apt_result.changed
 
   - name: copy udev 70-persistent-net.rules
     copy:
@@ -128,86 +134,6 @@
 
   - name: Apply sysctl settings
     command: sysctl -p
-
-  # - name: Set ethtool ring buffer sizes
-  #   command: ethtool -G eth2 rx 8192 tx 8192
-  #   ignore_errors: yes
-
-  # - name: Set MTU to 9000 on eth0
-  #   command:
-  #     cmd: ip link set dev eth0 mtu 9000
-  #   ignore_errors: yes
-  #   notify:
-  #     - Restart networking
-
-###### eth0 ######
-
-  # - name: Check if eth0 has the IP address 192.168.4.1
-  #   command:
-  #     cmd: ip addr show dev eth0
-  #   ignore_errors: yes
-  #   register: eth0_output
-
-
-  # - name: Check for eth0-connection
-  #   command: nmcli connection show
-  #   when: "'192.168.4.1' not in eth0_output.stdout"
-  #   register: eth0_connection
-
-  # - name: Add a new connection for eth0
-  #   command: nmcli con add type ethernet ifname eth0 con-name eth0-connection
-  #   when: "'192.168.4.1' not in eth0_output.stdout and 'eth0-connection' not in eth0_connection"
-
-  # - name: Set IP address for eth0
-  #   command: nmcli con mod eth0-connection ipv4.addresses "192.168.4.1/24"
-  #   ignore_errors: yes
-  #   when: "'192.168.4.1' not in eth0_output.stdout"
-  #   notify:
-  #     - Restart networking
-
-  # - name: Set IP method to manual
-  #   command: nmcli con mod eth0-connection ipv4.method manual
-  #   ignore_errors: yes
-  #   when: "'192.168.4.1' not in eth0_output.stdout"
-  #   notify:
-  #     - Restart networking
-
-  # - name: Bring up the connection
-  #   command: nmcli con up eth0-connection
-  #   ignore_errors: yes
-  #   when: "'192.168.4.1' not in eth0_output.stdout"
-  #   notify:
-  #     - Restart networking
-
-  # - name: Check if eth1 has the IP address 192.168.20.1
-  #   command:
-  #     cmd: ip addr show dev eth1
-  #   ignore_errors: yes
-  #   register: eth1_output
-
-  # - name: Add a new connection for eth0
-  #   command: nmcli con add type ethernet ifname eth0 con-name eth0-connection
-
-  # - name: Set IP address for eth1
-  #   command: nmcli con mod eth1-connection ipv4.addresses "192.168.20.1/24"
-  #   ignore_errors: yes
-  #   when: "'192.168.20.1' not in eth1_output.stdout"
-  #   notify:
-  #     - Restart networking
-
-  # - name: Set IP method to manual
-  #   command: nmcli con mod eth1-connection ipv4.method manual
-  #   ignore_errors: yes
-  #   when: "'192.168.20.1' not in eth1_output.stdout"
-  #   notify:
-  #     - Restart networking
-
-  # - name: Bring up the connection
-  #   command: nmcli con up eth1-connection
-  #   ignore_errors: yes
-  #   when: "'192.168.20.1' not in eth1_output.stdout"
-  #   notify:
-  #     - Restart networking
 
 
   - name: Set kernel boot args
