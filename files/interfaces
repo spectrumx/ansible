@@ -22,7 +22,7 @@ iface en1 inet static
     netmask 255.255.255.0
     dns-nameservers 8.8.8.8 8.8.4.4
 
-# Mellanox NIC, used for RFSoC data
+# High speed NIC, used for RFSoC data
 auto en2
 iface en2 inet static
     address 192.168.4.1

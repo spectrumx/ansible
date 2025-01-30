@@ -93,32 +93,6 @@
   #   shell: "files/uv-install.sh"
 
 
-  - name: Check if Mellanox tools are installed
-    ansible.builtin.command:
-      cmd: dpkg-query -W -f='${Status}' mlnx-ofed-kernel-dkms
-    register: mft_check
-    ignore_errors: yes
-
-  - name: Extract the Mellanox firmware tools archive
-    ansible.builtin.command:
-      cmd: wget https://github.com/spectrumx/ansible/releases/download/deps-20241112/MLNX_OFED_LINUX-24.07-0.6.1.0-ubuntu22.04-aarch64.tgz -O /tmp/MLNX_OFED_LINUX-24.07-0.6.1.0-ubuntu22.04-aarch64.tgz
-      warn: false
-    when: mft_check.rc != 0
-
-  - name: Extract the Mellanox firmware tools archive
-    ansible.builtin.command:
-      cmd: tar -xzf /tmp/MLNX_OFED_LINUX-24.07-0.6.1.0-ubuntu22.04-aarch64.tgz -C /tmp/
-      warn: false
-    when: mft_check.rc != 0
-
-  - name: Install the Mellanox Drivers
-    command:
-      cmd: /tmp/MLNX_OFED_LINUX-24.07-0.6.1.0-ubuntu22.04-aarch64/mlnxofedinstall --basic --with-mstflint --with-python3-pyverbs --force --without-fw-update
-    when: mft_check.rc != 0
-
-
-
-
   - name: Clone holohub repository
     git:
       repo: 'https://github.com/ryanvolz/holohub.git'
