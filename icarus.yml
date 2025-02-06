@@ -137,22 +137,6 @@
     #     state: link
 
 
-    - name: create icarus' virtualenvs directory for compatibility
-      file:
-        path: /opt/icarus/.virtualenvs/python3.9/bin
-        state: directory
-        owner: icarus
-        group: icarus
-        mode: 0755
-
-    - name: Create a symbolic link
-      file:
-        src: /opt/radiohound/venv/bin/python3
-        dest: /opt/icarus/.virtualenvs/python3.9/bin/python
-        owner: icarus
-        group: icarus
-        state: link
-
     - name: copy icarus service
       copy:
         src: "files/icarus.service"
