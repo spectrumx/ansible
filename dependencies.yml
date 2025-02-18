@@ -114,34 +114,34 @@
     when: run_holohub_setup
 
 
-  - name: Check if dpdk is installed
-    ansible.builtin.command:
-      cmd: dpkg-query -W -f='${Version}' dpdk-for-jetson
-    register: dpdk_check
-    ignore_errors: yes
+  # - name: Check if dpdk is installed
+  #   ansible.builtin.command:
+  #     cmd: dpkg-query -W -f='${Version}' dpdk-for-jetson
+  #   register: dpdk_check
+  #   ignore_errors: yes
 
-  - name: Download dpdk
-    ansible.builtin.command:
-      cmd: wget https://github.com/spectrumx/ansible/releases/download/deps-20241112/dpdk-for-jetson_22.11.6-1ubuntu2_arm64.deb -O /tmp/dpdk-for-jetson_22.11.6-1ubuntu2_arm64.deb
-      warn: false
-    when: dpdk_check.stdout != "22.11.6-1ubuntu2"
+  # - name: Download dpdk
+  #   ansible.builtin.command:
+  #     cmd: wget https://github.com/spectrumx/ansible/releases/download/deps-20241112/dpdk-for-jetson_22.11.6-1ubuntu2_arm64.deb -O /tmp/dpdk-for-jetson_22.11.6-1ubuntu2_arm64.deb
+  #     warn: false
+  #   when: dpdk_check.stdout != "22.11.6-1ubuntu2"
 
-  - name: Install dpdk
-    apt:
-      deb: /tmp/dpdk-for-jetson_22.11.6-1ubuntu2_arm64.deb
-      state: present
-    when: dpdk_check.stdout != "22.11.6-1ubuntu2"
+  # - name: Install dpdk
+  #   apt:
+  #     deb: /tmp/dpdk-for-jetson_22.11.6-1ubuntu2_arm64.deb
+  #     state: present
+  #   when: dpdk_check.stdout != "22.11.6-1ubuntu2"
 
-  - name: Install holohub (long)
-    command:
-      cmd: './run build mimo_radar_pipeline --configure-args "-DMATX_EN_PYBIND11=ON -DPYBIND11_FINDPYTHON=ON -DPython_EXECUTABLE=/usr/bin/python3 -DPython_ROOT_DIR=/usr/lib/python3"'
-      chdir: /opt/holohub
-    when: run_holohub_setup
+  # - name: Install holohub (long)
+  #   command:
+  #     cmd: './run build mimo_radar_pipeline --configure-args "-DMATX_EN_PYBIND11=ON -DPYBIND11_FINDPYTHON=ON -DPython_EXECUTABLE=/usr/bin/python3 -DPython_ROOT_DIR=/usr/lib/python3"'
+  #     chdir: /opt/holohub
+  #   when: run_holohub_setup
 
-  - name: Holohub setcap
-    command:
-      cmd: 'setcap cap_net_raw,cap_dac_override,cap_dac_read_search,cap_ipc_lock,cap_sys_admin+ep ./build/applications/mimo_radar_pipeline/cpp/mimo_radar_pipeline'
-      chdir: /opt/holohub
-    when: run_holohub_setup
+  # - name: Holohub setcap
+  #   command:
+  #     cmd: 'setcap cap_net_raw,cap_dac_override,cap_dac_read_search,cap_ipc_lock,cap_sys_admin+ep ./build/applications/mimo_radar_pipeline/cpp/mimo_radar_pipeline'
+  #     chdir: /opt/holohub
+  #   when: run_holohub_setup
 
 
