@@ -1,0 +1,56 @@
+---
+- hosts: localhost  
+  tasks:
+    # Setup symlink that's used by some packages
+    - name: Copy .env for docker
+      file:
+        src: /opt/radiohound/.ssh/.env.docker
+        dest: /opt/radiohound/docker/.env
+        owner: root
+        group: root
+
+    - name: Install Icarus Dependencies (Apt)
+      apt:
+        pkg:
+            - docker.io
+            - docker-compose
+        state: present
+
+    - name: clone docker repository
+      git:
+        repo: git@github.com:spectrumx/docker.git
+        dest: /opt/radiohound/docker
+        update: yes
+        key_file: /home/radiohound/.ssh/id_rsa
+        accept_hostkey: yes
+
+    - name: Add ssh key to docker repo
+      shell: GIT_DIR=/opt/radiohound/docker/.git GIT_WORK_TREE=/opt/radiohound/docker git config core.sshCommand "ssh -i /home/radiohound/.ssh/id_rsa"
+
+    - name: Add git safe.directory to docker repo
+      shell: GIT_DIR=/opt/radiohound/docker/.git GIT_WORK_TREE=/opt/radiohound/docker git config --add safe.directory /opt/radiohound/docker
+
+    - name: Start Docker containers
+      shell: docker-compose up -d
+      args:
+        chdir: /opt/radiohound/docker
+
+    - name: copy docker-control service
+      copy:
+        src: "files/docker-control.service"
+        dest: "/etc/systemd/system/"
+        owner: root
+        group: root
+      notify:
+        - systemctl reload
+        - start docker-control daemon
+
+  handlers:
+    - name: systemctl reload
+      shell: /bin/systemctl daemon-reload
+        
+    - name: start docker-control daemon
+      systemd:
+        name: docker-control
+        state: started
+        enabled: yes

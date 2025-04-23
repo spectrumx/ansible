@@ -1,0 +1,12 @@
+# Docker control script
+[Unit]
+Description=Docker control script for RadioHound
+
+[Service]
+Type=simple
+ExecStart=/opt/radiohound/python313/bin/python /opt/ansible/files/docker-control.py
+Environment=CI=true
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

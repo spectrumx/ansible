@@ -43,6 +43,7 @@
           - gps>=3.19
           - digital_rf
           - spectrumx
+          - docker
         state: present
         virtualenv: /opt/radiohound/python313
         virtualenv_python: python
@@ -163,5 +164,3 @@
         name: icarus
         state: started
         enabled: yes
-
-...

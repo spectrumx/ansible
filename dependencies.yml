@@ -24,7 +24,7 @@
     apt:
       pkg:
           - libhdf5-dev
-          - docker.io
+
           - mosquitto-clients 
           - host
           - dnsutils
