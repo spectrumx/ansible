@@ -25,7 +25,7 @@
         accept_hostkey: yes
 
     - name: Add ssh key to docker repo
-      shell: GIT_DIR=/opt/radiohound/docker/.git GIT_WORK_TREE=/opt/radiohound/docker git config core.sshCommand "ssh -i /home/radiohound/.ssh/id_rsa"
+      shell: GIT_DIR=/opt/radiohound/docker/.git GIT_WORK_TREE=/opt/radiohound/docker git config core.sshCommand "ssh -i /opt/radiohound/.ssh/id_rsa"
 
     - name: Add git safe.directory to docker repo
       shell: GIT_DIR=/opt/radiohound/docker/.git GIT_WORK_TREE=/opt/radiohound/docker git config --add safe.directory /opt/radiohound/docker
