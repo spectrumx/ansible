@@ -3,7 +3,7 @@
   tasks:
     # Setup symlink that's used by some packages
     - name: Copy .env for docker
-      file:
+      copy:
         src: /opt/radiohound/.ssh/.env.docker
         dest: /opt/radiohound/docker/.env
         owner: root
