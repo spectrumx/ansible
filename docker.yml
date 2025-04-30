@@ -1,13 +1,6 @@
 ---
 - hosts: localhost  
   tasks:
-    # Setup symlink that's used by some packages
-    - name: Copy .env for docker
-      copy:
-        src: /opt/radiohound/.ssh/.env.docker
-        dest: /opt/radiohound/docker/.env
-        owner: root
-        group: root
 
     - name: Install Icarus Dependencies (Apt)
       apt:
@@ -29,6 +22,13 @@
 
     - name: Add git safe.directory to docker repo
       shell: GIT_DIR=/opt/radiohound/docker/.git GIT_WORK_TREE=/opt/radiohound/docker git config --add safe.directory /opt/radiohound/docker
+
+    - name: Copy .env for docker
+      copy:
+        src: /opt/radiohound/.ssh/.env.docker
+        dest: /opt/radiohound/docker/.env
+        owner: root
+        group: root
 
     - name: Start Docker containers
       shell: docker-compose up -d
