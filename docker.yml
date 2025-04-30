@@ -14,7 +14,7 @@
         repo: git@github.com:spectrumx/docker.git
         dest: /opt/radiohound/docker
         update: yes
-        key_file: /home/radiohound/.ssh/id_rsa
+        key_file: /opt/radiohound/.ssh/id_rsa
         accept_hostkey: yes
 
     - name: Add ssh key to docker repo
