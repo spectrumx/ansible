@@ -6,7 +6,7 @@
       user:
         name: mep
         comment: MEP User Account
-        groups: "adm docker"
+        groups: "adm, docker"
         shell: /bin/bash
         append: yes
 
