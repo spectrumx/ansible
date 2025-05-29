@@ -32,10 +32,16 @@
         force: no
       ignore_errors: yes
 
+    - name: Check if any containers are running
+      command: docker ps --format "{{.Names}}"
+      register: running_containers
+      changed_when: false
+
     - name: Start Docker containers
       shell: docker-compose up -d
       args:
         chdir: /opt/radiohound/docker
+      when: running_containers.stdout == ""
 
     - name: copy docker-control service
       copy:
