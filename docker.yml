@@ -29,6 +29,7 @@
         dest: /opt/radiohound/docker/.env
         owner: root
         group: root
+        force: no
 
     - name: Start Docker containers
       shell: docker-compose up -d
