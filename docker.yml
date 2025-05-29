@@ -30,6 +30,7 @@
         owner: root
         group: root
         force: no
+      ignore_errors: yes
 
     - name: Start Docker containers
       shell: docker-compose up -d
