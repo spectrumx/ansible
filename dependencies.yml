@@ -57,6 +57,9 @@
           - libpcap0.8-dev 
           - meson 
           - python3-pyelftools
+          - nvidia-container
+          - docker-compose-v2
+          - docker-buildx
       state: present
       update_cache: yes
 
@@ -100,7 +103,9 @@
       update: yes
       version: "mep"
       accept_hostkey: yes
+    ignore_errors: yes
     register: run_holohub_setup
+
   
   - name: Add git safe.directory to holohub repo
     shell: GIT_DIR=/opt/holohub/.git GIT_WORK_TREE=/opt/holohub git config --add safe.directory "/opt/holohub"
