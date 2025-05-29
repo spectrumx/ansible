@@ -33,7 +33,7 @@
       ignore_errors: yes
 
     - name: Check if any containers are running
-      command: docker ps --format "{{.Names}}"
+      command: docker ps --format="{% raw %}{{.Names}}{% endraw %}"
       register: running_containers
       changed_when: false
 
