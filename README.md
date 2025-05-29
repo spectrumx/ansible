@@ -5,7 +5,7 @@ This is meant to be ran on a fresh image and will setup all necessary packages a
 
 - Create `/opt/radiohound`
 - Copy the ssh key to `/opt/radiohound/.ssh/id_rsa`.  See Randy for more info.
-- Copy .env.docker to `/opt/radiohound/.ssh/.env`.  See Randy for more info.
+- Copy .env.docker to `/opt/radiohound/.ssh/.env.docker`.  See Randy for more info.
 - Clone the following repo to `/opt/ansible`
 ```
 GIT_SSH_COMMAND='ssh -i /opt/radiohound/.ssh/id_rsa -o IdentitiesOnly=yes' git clone git@github.com:spectrumx/ansible.git
