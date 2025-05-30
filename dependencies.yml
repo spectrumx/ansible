@@ -31,9 +31,9 @@
           - screen
           - telnet
           - chrony
-          - telegraf
-          - influxdb
-          - influxdb-client
+          #- telegraf
+          #- influxdb
+          #- influxdb-client
           - vim
           - nano
           - less
@@ -49,14 +49,14 @@
           - iftop
           - backport-iwlwifi-dkms
           - firefox
-          - cuda-nvtx-12-2 
-          - libcufft-dev-12-2 
-          - libcusolver-dev-12-2 
-          - libcurand-dev-12-2
-          - holoscan
-          - libpcap0.8-dev 
-          - meson 
-          - python3-pyelftools
+          #- cuda-nvtx-12-2 
+          #- libcufft-dev-12-2 
+          #- libcusolver-dev-12-2 
+          #- libcurand-dev-12-2
+          #- holoscan
+          #- libpcap0.8-dev 
+          #- meson 
+          #- python3-pyelftools
           - nvidia-container
           - docker-compose-v2
           - docker-buildx

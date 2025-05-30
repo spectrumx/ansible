@@ -32,6 +32,26 @@
         force: no
       ignore_errors: yes
 
+    - name: Get UID and GID of 'mep' user
+      ansible.builtin.command: id -u mep
+      register: mep_uid
+
+    - name: Get GID of 'mep' user
+      ansible.builtin.command: id -g mep
+      register: mep_gid
+
+    - name: Replace UID and GID in .env.docker
+      ansible.builtin.replace:
+        path: /opt/radiohound/.ssh/.env.docker
+        regexp: 'UID=MEP_UID'
+        replace: "UID={{ mep_uid.stdout }}"
+
+    - name: Replace GID in .env.docker
+      ansible.builtin.replace:
+        path: /opt/radiohound/.ssh/.env.docker
+        regexp: 'GID=MEP_GID'
+        replace: "GID={{ mep_gid.stdout }}"
+
     - name: Check if any containers are running
       command: docker ps --format="{% raw %}{{.Names}}{% endraw %}"
       register: running_containers
