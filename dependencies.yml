@@ -96,27 +96,27 @@
   #   shell: "files/uv-install.sh"
 
 
-  - name: Clone holohub repository
-    git:
-      repo: 'https://github.com/ryanvolz/holohub.git'
-      dest: /opt/holohub
-      update: yes
-      version: "mep"
-      accept_hostkey: yes
-    ignore_errors: yes
-    register: run_holohub_setup
+  # - name: Clone holohub repository
+  #   git:
+  #     repo: 'https://github.com/ryanvolz/holohub.git'
+  #     dest: /opt/holohub
+  #     update: yes
+  #     version: "mep"
+  #     accept_hostkey: yes
+  #   ignore_errors: yes
+  #   register: run_holohub_setup
 
   
-  - name: Add git safe.directory to holohub repo
-    shell: GIT_DIR=/opt/holohub/.git GIT_WORK_TREE=/opt/holohub git config --add safe.directory "/opt/holohub"
-    when: not run_holohub_setup.before
+  # - name: Add git safe.directory to holohub repo
+  #   shell: GIT_DIR=/opt/holohub/.git GIT_WORK_TREE=/opt/holohub git config --add safe.directory "/opt/holohub"
+  #   when: not run_holohub_setup.before
 
 
-  - name: Setup holohub
-    command:
-      cmd: ./run setup
-      chdir: /opt/holohub
-    when: run_holohub_setup
+  # - name: Setup holohub
+  #   command:
+  #     cmd: ./run setup
+  #     chdir: /opt/holohub
+  #   when: run_holohub_setup
 
 
   # - name: Check if dpdk is installed
