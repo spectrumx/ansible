@@ -40,15 +40,15 @@
       ansible.builtin.command: id -g mep
       register: mep_gid
 
-    - name: Replace UID and GID in .env.docker
+    - name: Replace UID and GID in .env
       ansible.builtin.replace:
-        path: /opt/radiohound/.ssh/.env.docker
+        path: /opt/radiohound/docker/.env
         regexp: 'UID=MEP_UID'
         replace: "UID={{ mep_uid.stdout }}"
 
-    - name: Replace GID in .env.docker
+    - name: Replace GID in .env
       ansible.builtin.replace:
-        path: /opt/radiohound/.ssh/.env.docker
+        path: /opt/radiohound/docker/.env
         regexp: 'GID=MEP_GID'
         replace: "GID={{ mep_gid.stdout }}"
 
