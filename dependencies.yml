@@ -63,6 +63,10 @@
       state: present
       update_cache: yes
 
+  - name: Restart Docker to load nvidia-container
+    shell:  service docker restart
+
+
 
   - name: Remove gnome-initial-setup
     apt:
