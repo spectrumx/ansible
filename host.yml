@@ -42,13 +42,7 @@
       pkg:
           - ifupdown
       state: present
-      update_cache: no
-    register: apt_result
-
-  - name: Register reboot if ifupdown got installed
-    set_fact:
-      need_reboot: "{{ apt_result }}"
-    when: apt_result.changed
+      update_cache: yes
 
   - name: copy udev 70-persistent-net.rules
     copy:
@@ -65,6 +59,11 @@
       mode: 0755
       owner: root
       group: root
+    register: network_config_changed
+
+  - name: Set need_reboot flag if file has changed
+    set_fact:
+      need_reboot: "{{ network_config_changed.changed }}"
 
   - name: Allow udev to set interface names
     lineinfile:
