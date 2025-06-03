@@ -59,11 +59,10 @@
       mode: 0755
       owner: root
       group: root
-    register: network_config_changed
 
-  - name: Set need_reboot flag if file has changed
-    set_fact:
-      need_reboot: "{{ network_config_changed.changed }}"
+  - name: Reload network interfaces
+    command: ifup eth1
+    ignore_errors: yes
 
   - name: Allow udev to set interface names
     lineinfile:
