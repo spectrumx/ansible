@@ -153,8 +153,13 @@
     # register: need_reboot
     # changed_when: need_reboot.changed and current_status.stat.exists and "'pmode:0003\n' not in current_status.content"
 
-
-
+  - name: copy dhcp restart cron
+    copy:
+      src: "files/cron-dhcp-restart"
+      dest: /etc/cron.d/dhcp-restart
+      mode: 0644
+      owner: root
+      group: root
 
 
 
