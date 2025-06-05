@@ -25,3 +25,15 @@
       src: /opt/linux-firmware/iwlwifi-8265-36.ucode
       dest: /lib/firmware/
       mode: '0644'
+
+  - name: Create WiFi hotspot connection
+    template:
+      src: templates/MEP-hotspot.nmconnection.j2
+      dest: /etc/NetworkManager/system-connections/MEP-{{ hostname }}.nmconnection
+      owner: root
+      group: root
+      mode: 0600
+
+  - name: Reload NetworkManager configuration
+    command: nmcli connection reload
+    ignore_errors: yes
