@@ -1,0 +1,16 @@
+[connection]
+id=External DHCP
+type=ethernet
+autoconnect-priority=-1
+interface-name=en0
+
+[ethernet]
+
+[ipv4]
+method=auto
+
+[ipv6]
+addr-gen-mode=stable-privacy
+method=auto
+
+[proxy]
