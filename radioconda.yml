@@ -2,7 +2,7 @@
 - hosts: localhost
   tasks:
   - name: Check for radioconda
-    stat: 
+    stat:
       path: /opt/radioconda/bin/gnuradio-companion
     register: gnuradio_companion
 
@@ -18,3 +18,12 @@
     args:
       creates: /opt/radioconda
     when: not gnuradio_companion.stat.exists
+
+  - name: chown /opt/radioconda to mep
+    file:
+      path: /opt/radioconda
+      state: directory
+      owner: mep
+      group: mep
+      mode: 0775
+      recurse: yes
