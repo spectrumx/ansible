@@ -25,7 +25,7 @@
       pkg:
           - libhdf5-dev
 
-          - mosquitto-clients 
+          - mosquitto-clients
           - host
           - dnsutils
           - screen
@@ -49,13 +49,13 @@
           - iftop
           - backport-iwlwifi-dkms
           - firefox
-          #- cuda-nvtx-12-2 
-          #- libcufft-dev-12-2 
-          #- libcusolver-dev-12-2 
+          #- cuda-nvtx-12-2
+          #- libcufft-dev-12-2
+          #- libcusolver-dev-12-2
           #- libcurand-dev-12-2
           #- holoscan
-          #- libpcap0.8-dev 
-          #- meson 
+          #- libpcap0.8-dev
+          #- meson
           #- python3-pyelftools
           - nvidia-container
           - docker-compose-v2
@@ -63,10 +63,14 @@
       state: present
       update_cache: yes
 
+  - name: Gather Docker runtimes
+    shell: docker info | grep -E "Runtimes:.*"
+    register: docker_runtimes
+    ignore_errors: yes
+
   - name: Restart Docker to load nvidia-container
+    when: "'nvidia' not in docker_runtimes.stdout"
     shell:  service docker restart
-
-
 
   - name: Remove gnome-initial-setup
     apt:
@@ -110,7 +114,7 @@
   #   ignore_errors: yes
   #   register: run_holohub_setup
 
-  
+
   # - name: Add git safe.directory to holohub repo
   #   shell: GIT_DIR=/opt/holohub/.git GIT_WORK_TREE=/opt/holohub git config --add safe.directory "/opt/holohub"
   #   when: not run_holohub_setup.before
