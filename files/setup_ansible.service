@@ -6,7 +6,7 @@ After=NetworkManager.target
 Type=oneshot
 Environment="PYTHONUNBUFFERED=True"
 ExecStartPre= /bin/sh -c 'until ping -c1 google.com; do sleep 1; done;'
-ExecStart=/usr/bin/python3 /root/setup_ansible.py
+ExecStart=/usr/bin/python3 /root/setup_ansible.py verbose
 RemainAfterExit=true
 
 [Install]

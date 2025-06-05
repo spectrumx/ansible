@@ -41,9 +41,15 @@ if not os.path.isfile("/usr/bin/ansible-playbook"):
   subprocess.call(["/usr/bin/apt", "-o","Acquire::Check-Valid-Until=false","-o","Acquire::Check-Date=false", "update"])
   subprocess.call(["/usr/bin/apt", "-o","Acquire::Check-Valid-Until=false","-o","Acquire::Check-Date=false", "install","-y","ansible","curl"])
 
+# Check arguments
+verbose = False
+if len(sys.argv) > 1 and "verbose" in sys.argv:
+    verbose = True
+    sys.argv.remove("verbose")
+ansible_verbosity = ["-vvv"] if verbose else []
 
 # If you specify 'git' as an argument or we're running through cron (no tty), then update git
-if len(sys.argv) > 1 and sys.argv[1] == "git" or not sys.stdout.isatty():
+if (len(sys.argv) > 1 and "git" in sys.argv) or not sys.stdout.isatty():
   print("Updating git repo")
   subprocess.call(["git","reset","--hard"],env=dict(GIT_SSH_COMMAND='ssh -i ' + ssh_file))
   subprocess.call(["git","fetch","-a"],env=dict(GIT_SSH_COMMAND='ssh -i ' + ssh_file))
@@ -64,7 +70,8 @@ else:
   file = 'master_playbook.yml'
 
 output = open(logfile,'w')
+ansible_cmd = ["/usr/bin/ansible-playbook","-e", f"actual_hostname={hostname}","-i","inventory/inventory-runtime.ini","--connection=local"] + ansible_verbosity + [file]
 if sys.stdout.isatty() or 'setup_ansible' in os.path.basename(__file__):
-  subprocess.call(["/usr/bin/ansible-playbook","-e actual_hostname="+hostname,"-i","inventory/inventory-runtime.ini","--connection=local", file], env=dict(PATH='/usr/bin/:/bin:/usr/local/sbin:/usr/sbin:/sbin',HOME=homedir))
+  subprocess.call(ansible_cmd, env=dict(PATH='/usr/bin/:/bin:/usr/local/sbin:/usr/sbin:/sbin',HOME=homedir))
 else:
-  subprocess.call(["/usr/bin/ansible-playbook","-e actual_hostname="+hostname,"-i","inventory/inventory-runtime.ini","--connection=local", file], stdout=output, stderr=subprocess.STDOUT, env=dict(PATH='/usr/bin/:/bin:/usr/local/sbin:/usr/sbin:/sbin',HOME=homedir))
+  subprocess.call(ansible_cmd, stdout=output, stderr=subprocess.STDOUT, env=dict(PATH='/usr/bin/:/bin:/usr/local/sbin:/usr/sbin:/sbin',HOME=homedir))
