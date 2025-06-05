@@ -34,3 +34,11 @@
 
     - name: Create logrotate entry for ansible-pull.log
       template: src=templates/etc_logrotate.d_ansible-pull.j2 dest=/etc/logrotate.d/ansible-pull owner=root group=root mode=0644
+
+    - name: Update /root/setup_ansible.py script
+      copy:
+        src: "run.py"
+        dest: /root/setup_ansible.py
+        mode: 0755
+        owner: root
+        group: root

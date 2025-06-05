@@ -1,0 +1,17 @@
+[connection]
+id=RFSoC Control
+type=ethernet
+interface-name=en1
+
+[ethernet]
+
+[ipv4]
+address1=192.168.20.1/24
+method=shared
+never-default=true
+
+[ipv6]
+addr-gen-mode=stable-privacy
+method=ignore
+
+[proxy]

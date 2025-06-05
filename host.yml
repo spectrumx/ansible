@@ -30,19 +30,17 @@
       owner: root
       group: root
 
-  - name: Remove Ubuntu's Network Manager 
+  - name: Make sure Network Manager is installed
     apt:
       pkg:
           - network-manager
-      state: absent
-      update_cache: no
-
-  - name: Install ifupdown to manage network
-    apt:
-      pkg:
-          - ifupdown
       state: present
       update_cache: yes
+
+  - name: Enable NetworkManager-wait-online.service
+    systemd:
+      name: NetworkManager-wait-online
+      enabled: true
 
   - name: copy udev 70-persistent-net.rules
     copy:
@@ -52,16 +50,24 @@
       owner: root
       group: root
 
-  - name: copy /etc/network/interfaces 
+  - name: copy /etc/NetworkManager/system-connections
     copy:
-      src: "files/interfaces"
-      dest: /etc/network/interfaces
-      mode: 0755
+      src: "files/NetworkManager/system-connections/"
+      dest: /etc/NetworkManager/system-connections/
+      mode: 0600
       owner: root
       group: root
 
-  - name: Reload network interfaces
-    command: ifup eth1
+  - name: copy /etc/NetworkManager/dnsmasq-shared.d
+    copy:
+      src: "files/NetworkManager/dnsmasq-shared.d/"
+      dest: /etc/NetworkManager/dnsmasq-shared.d/
+      mode: 0644
+      owner: root
+      group: root
+
+  - name: Reload NetworkManager configuration
+    command: nmcli connection reload
     ignore_errors: yes
 
   - name: Allow udev to set interface names
@@ -71,7 +77,7 @@
       regexp: '^NamePolicy=keep'
       line: 'NamePolicy=database keep kernel onboard slot path'
 
-  - name: Gather network interfaces 
+  - name: Gather network interfaces
     shell: ifconfig
     register: network_interfaces
 
@@ -109,14 +115,6 @@
 
   - copy: content="{{ hostname }}" dest=/etc/hostname
 
-
-  - name: Setup firewall 
-    shell: |
-      iptables-legacy -t nat -A POSTROUTING -o en0 -j MASQUERADE
-      iptables-legacy -A FORWARD -i eth0 -o en1 -m state --state RELATED,ESTABLISHED -j ACCEPT
-      iptables-legacy -A FORWARD -i eth1 -o en0 -j ACCEPT
-
-
   - name: Ensure sysctl.conf has the correct values
     lineinfile:
       path: /etc/sysctl.conf
@@ -133,14 +131,6 @@
   - name: Apply sysctl settings
     command: sysctl -p
 
-
-  - name: Set kernel boot args
-    copy:
-      src: files/extlinux.conf
-      dest: /boot/extlinux/extlinux.conf
-      owner: root
-      group: root
-
   - name: Check current power mode
     stat:
       path: /var/lib/nvpmodel/status
@@ -152,14 +142,6 @@
       content: "pmode:0003\n"
     # register: need_reboot
     # changed_when: need_reboot.changed and current_status.stat.exists and "'pmode:0003\n' not in current_status.content"
-
-  - name: copy dhcp restart cron
-    copy:
-      src: "files/cron-dhcp-restart"
-      dest: /etc/cron.d/dhcp-restart
-      mode: 0644
-      owner: root
-      group: root
 
 
 
