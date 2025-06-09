@@ -26,28 +26,14 @@
       dest: /lib/firmware/
       mode: '0644'
 
-  - name: Install Hotspot
-    apt:
-      pkg:
-          - hostapd
-      state: present
-  
-  - name: Unmask Hotspot service
-    shell: systemctl unmask hostapd
-    notify:
-      - Restart hostapd
+  - name: Create WiFi hotspot connection
+    template:
+      src: templates/MEP-hotspot.nmconnection.j2
+      dest: /etc/NetworkManager/system-connections/MEP-{{ hostname }}.nmconnection
+      owner: root
+      group: root
+      mode: 0600
 
-  - name: Setup wifi hotspot
-    template: src=templates/hostapd.conf.j2 dest=/etc/hostapd/hostapd.conf owner=root group=root
-    notify:
-      - Restart hostapd
-
-
-
-
-
-  handlers:
-    - name: Restart hostapd
-      ansible.builtin.service:
-        name: hostapd
-        state: restarted
+  - name: Reload NetworkManager configuration
+    command: nmcli connection reload
+    ignore_errors: yes
