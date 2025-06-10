@@ -2,11 +2,18 @@
 - hosts: localhost
   tasks:
 
+  - name: Check if safe.directory exists
+    shell: grep -q 'safe.directory' /opt/ansible/.git/config
+    register: safe_directory_check
+    ignore_errors: true
+
   - name: Add key to ansible repo
     shell: GIT_DIR=/opt/ansible/.git GIT_WORK_TREE=/opt/ansible git config core.sshCommand "ssh -i /opt/radiohound/.ssh/id_rsa"
+    when: safe_directory_check.rc != 0
 
   - name: Add git safe.directory to ansible repo
     shell: GIT_DIR=/opt/ansible/.git GIT_WORK_TREE=/opt/ansible git config --add safe.directory /opt/ansible
+    when: safe_directory_check.rc != 0
 
   - name: Get Jetson Model from /proc/device-tree/model
     ansible.builtin.command: cat /proc/device-tree/model
