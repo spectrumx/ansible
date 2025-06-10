@@ -3,7 +3,7 @@
   tasks:
 
   - name: Check if safe.directory exists
-    shell: grep -q 'safe.directory' /opt/ansible/.git/config
+    shell: grep -q 'safe' /opt/ansible/.git/config
     register: safe_directory_check
     ignore_errors: true
 
