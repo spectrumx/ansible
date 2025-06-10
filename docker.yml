@@ -17,11 +17,18 @@
         key_file: /opt/radiohound/.ssh/id_rsa
         accept_hostkey: yes
 
+    - name: Check if safe.directory exists
+      shell: grep -q 'safe.directory' /opt/radiohound/docker/.git/config
+      register: docker_safe_directory_check
+      ignore_errors: true
+
     - name: Add ssh key to docker repo
       shell: GIT_DIR=/opt/radiohound/docker/.git GIT_WORK_TREE=/opt/radiohound/docker git config core.sshCommand "ssh -i /opt/radiohound/.ssh/id_rsa"
+      when: docker_safe_directory_check.rc != 0
 
     - name: Add git safe.directory to docker repo
       shell: GIT_DIR=/opt/radiohound/docker/.git GIT_WORK_TREE=/opt/radiohound/docker git config --add safe.directory /opt/radiohound/docker
+      when: docker_safe_directory_check.rc != 0
 
     - name: Copy .env for docker
       copy:
