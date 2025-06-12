@@ -27,3 +27,4 @@
       group: mep
       mode: 0775
       recurse: yes
+    when: not gnuradio_companion.stat.exists
