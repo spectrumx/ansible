@@ -1,12 +1,16 @@
 # Docker control script
 [Unit]
 Description=Docker control script for RadioHound
+StartLimitIntervalSec=60
+StartLimitBurst=60
+
 
 [Service]
 Type=simple
 ExecStart=/opt/radiohound/python313/bin/python -B /opt/ansible/files/docker-control.py
 Environment=CI=true
 Restart=always
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
