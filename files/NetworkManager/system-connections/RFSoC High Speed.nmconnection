@@ -6,6 +6,10 @@ interface-name=en2
 [ethernet]
 mtu=9000
 
+[ethtool]
+ring-rx=4096
+ring-tx=4096
+
 [ipv4]
 address1=192.168.4.1/24
 method=manual
