@@ -33,18 +33,38 @@ def run_compose_command(payload):
         error = ''
 
         if command[0] == "start":
-            result = subprocess.run( ["docker-compose","up","-d"], cwd=compose_base_dir, capture_output=True, text=True)
+            print("Starting docker containers...")
+            result = subprocess.run( ["docker","compose","up","-d"], cwd=compose_base_dir, capture_output=True, text=True)
             output = result.stdout
             error = result.stderr
         elif command[0] == "stop":
-            result = subprocess.run( ["docker-compose","stop"], cwd=compose_base_dir, capture_output=True, text=True)
+            print("Stopping docker containers...")
+            result = subprocess.run( ["docker","compose","down"], cwd=compose_base_dir, capture_output=True, text=True)
             output = result.stdout
             error = result.stderr
         elif command[0] == "update":
-            result1 = subprocess.run( ["docker-compose","pull"], cwd=compose_base_dir, capture_output=True, text=True)
-            result2 = subprocess.run( ["docker-compose","up","-d","--force-recreate"], cwd=compose_base_dir, capture_output=True, text=True)
-            output = result1.stdout + result2.stdout
-            error = result1.stderr + result2.stderr
+            print("Updating docker containers...")
+            result0 = subprocess.run( ["docker","compose","down"], cwd=compose_base_dir, capture_output=True, text=True)
+            result1 = subprocess.run( ["docker","compose","pull"], cwd=compose_base_dir, capture_output=True, text=True)
+            result2 = subprocess.run( ["docker","compose","up","-d","--force-recreate"], cwd=compose_base_dir, capture_output=True, text=True)
+            output = result0.stdout + result1.stdout + result2.stdout
+            error = result0.stderr + result1.stderr + result2.stderr
+
+            time.sleep(5)
+
+            # Ensure 'mqtt' container is running
+            check_mqtt = subprocess.run(
+                ["docker", "ps", "--filter", "name=mqtt", "--filter", "status=running", "--format", "{{.Names}}"],
+                capture_output=True, text=True
+            )
+            if "mqtt" not in check_mqtt.stdout:
+                print("mqtt container is not running, restarting all containers...")
+                restart_result = subprocess.run(
+                    ["docker", "compose", "up", "-d"],
+                    cwd=compose_base_dir, capture_output=True, text=True
+                )
+                output += restart_result.stdout
+                error += restart_result.stderr
         elif command[0] == "status":
             pass #Status is sent after every command
         else:
@@ -66,30 +86,8 @@ def on_message(client, userdata, msg):
     try:
         payload = msg.payload.decode()
         print(f"Received message: {payload}")
-        # parts = payload.split()
 
         thread = threading.Thread(target=run_compose_command, args=(payload,))
-
-
-        # if parts[0] == "start":
-        #     # run_compose_command(parts[1], ["up", "-d"])
-        #     # thread = threading.Thread(target=run_compose_command, args=(parts[1], ["up", "-d"]))
-        #     thread = threading.Thread(target=run_compose_command, args=(parts))
-        # elif parts[0] == "stop":
-        #     # run_compose_command(parts[1], ["stop"])
-        #     thread = threading.Thread(target=run_compose_command, args=(parts[1], ["stop"]))
-        # elif parts[0] == "pull":
-        #     # thread = threading.Thread(target=run_compose_command, args=(parts[1], ["stop"]))
-        #     # thread = threading.Thread(target=run_compose_command, args=(parts[1], ["stop"]))
-        #     # run_compose_command(parts[1], ["pull"])
-        #     # run_compose_command(parts[1], ["up", "-d", "--force-recreate"])
-        #     pass
-        # elif parts[0] == "status":
-        #     send_status(mqtt_client)
-        #     pass  # Status is sent after every command
-        # else:
-        #     print(f"Unknown command: {parts[0]}")
-
         thread.daemon = True
         thread.start()
     except Exception as err:

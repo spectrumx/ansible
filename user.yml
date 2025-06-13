@@ -66,6 +66,14 @@
         group: mep
         mode: 0777
 
+    - name: Create /data for ring buffers
+      file:
+        path: /data/recordings
+        state: directory
+        owner: mep
+        group: mep
+        mode: 0777
+
     - name: Add user to sudoers
       lineinfile:
         path: /etc/sudoers
