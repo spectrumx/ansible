@@ -89,10 +89,11 @@
     when: "'nvidia' not in docker_runtimes.stdout"
     shell:  service docker restart
 
-  - name: Remove gnome-initial-setup
+  - name: Remove unnecessary packages
     apt:
       pkg:
         - gnome-initial-setup
+        - nftables
       state: absent
 
   # - name: Install Utilities (Pip)
