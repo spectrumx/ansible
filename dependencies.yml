@@ -24,7 +24,6 @@
     apt:
       pkg:
           - libhdf5-dev
-
           - mosquitto-clients
           - host
           - dnsutils
@@ -49,19 +48,37 @@
           - iftop
           - backport-iwlwifi-dkms
           - firefox
-          #- cuda-nvtx-12-2
-          #- libcufft-dev-12-2
-          #- libcusolver-dev-12-2
-          #- libcurand-dev-12-2
-          #- holoscan
-          #- libpcap0.8-dev
-          #- meson
-          #- python3-pyelftools
           - nvidia-container
           - docker-compose-v2
           - docker-buildx
+          - python3.13-venv
       state: present
       update_cache: yes
+
+  - name: Create a virtual environment
+    command: python3.13 -m venv /opt/radiohound/python313
+
+  - name: Install Icarus Dependencies (Pip)
+    pip:
+      name:
+        - paho-mqtt>=1.5.1 
+        - requests>=2.26.0
+        - serial>=0.0.97
+        - schedule>=0.6.0
+        - inotify>=0.2.10
+        - scipy>=1.8.0
+        - pytz>=2022.1
+        - numpy>=1.22.3
+        - pyvisa>=1.12.0
+        - PyVISA-py>=0.5.3
+        - psutil>=6.0.0
+        - gps>=3.19
+        - digital_rf
+        - spectrumx
+        - docker
+      state: present
+      virtualenv: /opt/radiohound/python313
+      virtualenv_python: python
 
   - name: Gather Docker runtimes
     shell: docker info | grep -E "Runtimes:.*"
