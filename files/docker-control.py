@@ -9,6 +9,8 @@ import threading
 service_name = "docker"
 compose_base_dir = "/opt/radiohound/docker"  # Base directory where all docker-compose projects are stored
 compose_file_name = "compose.yaml"
+announce_data = {}
+status_data = {}
 
 announce_packet = {
     "title": "Docker Compose Control Script",
@@ -85,7 +87,12 @@ def on_connect(client, userdata, flags, rc):
 def on_message(client, userdata, msg):
     try:
         payload = msg.payload.decode()
-        print(f"Received message: {payload}")
+        if 'announce' in msg.topic:
+            announce_data[msg.topic] = json.loads(payload)
+            return
+        if 'status' in msg.topic:
+            status_data[msg.topic.split('/')[0]] = json.loads(payload)
+            return
 
         thread = threading.Thread(target=run_compose_command, args=(payload,))
         thread.daemon = True
@@ -96,7 +103,6 @@ def on_message(client, userdata, msg):
 def send_status(client):
     try:
         result = subprocess.run(["docker", "ps", "--format", "{{json .}}"], capture_output=True, text=True)
-        containers_info = [json.loads(line) for line in result.stdout.strip().splitlines()]
         '''
         Example docker ps output:
         {
@@ -117,6 +123,12 @@ def send_status(client):
         }
         '''
 
+        containers_info = [json.loads(line) for line in result.stdout.strip().splitlines()]
+        for container in containers_info:
+            name = container['Names']
+            if name in status_data:
+                container['RadioHoundStatus'] = status_data[name]
+
         payload = {
             "state": "online",
             "timestamp": time.time(),
@@ -133,4 +145,6 @@ mqtt_client.on_message = on_message
 mqtt_client.on_connect = on_connect
 mqtt_client.will_set(service_name + "/status", payload=json.dumps({"state": "offline"}), qos=0, retain=True)
 mqtt_client.connect('localhost', 1883, 60)
+mqtt_client.subscribe('announce/#')
+mqtt_client.subscribe('+/status')
 mqtt_client.loop_forever()
