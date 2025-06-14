@@ -57,6 +57,14 @@
       owner: root
       group: root
 
+  - name: copy udev 70-wifi-ap-dev.rules
+    copy:
+      src: "files/70-wifi-ap-dev.rules"
+      dest: /etc/udev/rules.d/70-wifi-ap-dev.rules
+      mode: 0755
+      owner: root
+      group: root
+
   - name: copy /etc/NetworkManager/system-connections
     copy:
       src: "files/NetworkManager/system-connections/"
