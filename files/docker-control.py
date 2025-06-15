@@ -11,6 +11,7 @@ compose_base_dir = "/opt/radiohound/docker"  # Base directory where all docker-c
 compose_file_name = "compose.yaml"
 announce_data = {}
 status_data = {}
+send_status_timer = None             # Add a global timer reference
 
 announce_packet = {
     "title": "Docker Compose Control Script",
@@ -29,10 +30,15 @@ if not os.path.exists(os.path.join(compose_base_dir, compose_file_name)):
     exit(1)
 
 def run_compose_command(payload):
+    global send_status_timer
     command = payload.split()
     try:
         output = ''
         error = ''
+
+        # Stop the send_status_timer right away
+        if send_status_timer is not None:
+            send_status_timer.cancel()
 
         if command[0] == "start":
             print("Starting docker containers...")
@@ -51,8 +57,6 @@ def run_compose_command(payload):
             result2 = subprocess.run( ["docker","compose","up","-d","--force-recreate"], cwd=compose_base_dir, capture_output=True, text=True)
             output = result0.stdout + result1.stdout + result2.stdout
             error = result0.stderr + result1.stderr + result2.stderr
-
-            time.sleep(5)
 
             # Ensure 'mqtt' container is running
             check_mqtt = subprocess.run(
@@ -75,7 +79,14 @@ def run_compose_command(payload):
         print(output)
         if not error == '':
             print(error)
-        send_status(mqtt_client)
+
+        # Replace direct send_status call with timer
+        def delayed_status():
+            send_status(mqtt_client)
+        send_status_timer = threading.Timer(2.0, delayed_status)
+        send_status_timer.daemon = True
+        send_status_timer.start()
+
     except Exception as e:
         print(f"Error running docker-compose command: {e}")
 
@@ -85,18 +96,28 @@ def on_connect(client, userdata, flags, rc):
     send_status(client)
 
 def on_message(client, userdata, msg):
+    global send_status_timer
     try:
         payload = msg.payload.decode()
         if 'announce' in msg.topic:
             announce_data[msg.topic] = json.loads(payload)
             return
-        if 'status' in msg.topic:
+        elif 'status' in msg.topic:
             status_data[msg.topic.split('/')[0]] = json.loads(payload)
             return
+        else:
+            thread = threading.Thread(target=run_compose_command, args=(payload,))
+            thread.daemon = True
+            thread.start()
 
-        thread = threading.Thread(target=run_compose_command, args=(payload,))
-        thread.daemon = True
-        thread.start()
+        # Debounce send_status: cancel previous timer and start a new one
+        if send_status_timer is not None:
+            send_status_timer.cancel()
+        def delayed_status():
+            send_status(client)
+        send_status_timer = threading.Timer(2.0, delayed_status)  # 2 second delay
+        send_status_timer.daemon = True
+        send_status_timer.start()
     except Exception as err:
         print(f"Failed to parse incoming message: {msg.payload.decode()}\n{err}\n{traceback.format_exc()}")
 
