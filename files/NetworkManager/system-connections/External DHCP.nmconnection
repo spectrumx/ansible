@@ -2,15 +2,19 @@
 id=External DHCP
 type=ethernet
 autoconnect-priority=-1
+autoconnect-retries=2
 interface-name=en0
 
 [ethernet]
 
 [ipv4]
+dhcp-timeout=10
 method=auto
 
 [ipv6]
 addr-gen-mode=stable-privacy
+dhcp-timeout=10
 method=auto
+ra-timeout=10
 
 [proxy]
