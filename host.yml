@@ -53,7 +53,7 @@
     copy:
       src: "files/70-persistent-net.rules"
       dest: /etc/udev/rules.d/70-persistent-net.rules
-      mode: 0755
+      mode: 0644
       owner: root
       group: root
 
@@ -61,7 +61,7 @@
     copy:
       src: "files/70-wifi-ap-dev.rules"
       dest: /etc/udev/rules.d/70-wifi-ap-dev.rules
-      mode: 0755
+      mode: 0644
       owner: root
       group: root
 
