@@ -20,11 +20,18 @@
   #     - restart dhcpd
 
 
+  - name: Configure chrony
+    blockinfile:
+      path: /etc/chrony/chrony.conf
+      state: present
+      block: |
+        allow 192.168.0.0/16
+    notify:
+      - Restart chrony
 
+  handlers:
 
-  # handlers:
-  #   - name: restart dhcpd
-  #     systemd:
-  #       name: isc-dhcp-server
-  #       state: restarted
-  #       enabled: yes
+  - name: Restart chrony
+    systemd:
+      name: chrony
+      state: restarted
