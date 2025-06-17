@@ -65,6 +65,14 @@
       owner: root
       group: root
 
+  - name: copy udev 99-usb-serial.rules
+    copy:
+      src: "files/99-usb-serial.rules"
+      dest: /etc/udev/rules.d/99-usb-serial.rules
+      mode: 0644
+      owner: root
+      group: root
+
   - name: copy /etc/NetworkManager/system-connections
     copy:
       src: "files/NetworkManager/system-connections/"
