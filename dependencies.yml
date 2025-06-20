@@ -15,11 +15,6 @@
     apt:
       update_cache: yes
 
-  - name: Install Python 3.13
-    apt:
-      name: python3.13
-      state: present
-
   - name: Install Dependencies (Apt)
     apt:
       pkg:
@@ -48,10 +43,15 @@
           - iftop
           - backport-iwlwifi-dkms
           - firefox
+          - python3.13
+          - python3.13-dev
+          - python3.13-venv
+          # recorder docker
           - nvidia-container
           - docker-compose-v2
           - docker-buildx
-          - python3.13-venv
+          # tuner control
+          - libusb-1.0
       state: present
       update_cache: yes
 
@@ -61,7 +61,7 @@
   - name: Install Icarus Dependencies (Pip)
     pip:
       name:
-        - paho-mqtt>=1.5.1 
+        - paho-mqtt>=1.5.1
         - requests>=2.26.0
         - serial>=0.0.97
         - schedule>=0.6.0
@@ -76,6 +76,8 @@
         - digital_rf
         - spectrumx
         - docker
+        # tuner control
+        - adafruit-blinka
       state: present
       virtualenv: /opt/radiohound/python313
       virtualenv_python: python
