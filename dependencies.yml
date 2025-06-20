@@ -51,7 +51,7 @@
           - docker-compose-v2
           - docker-buildx
           # tuner control
-          - libusb-1.0
+          - libusb-1.0-0
       state: present
       update_cache: yes
 
