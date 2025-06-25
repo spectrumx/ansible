@@ -24,8 +24,6 @@
 
   - name: Run radioconda script (long)
     command: /tmp/radioconda.sh -b -f -p /opt/radioconda
-    args:
-      creates: /opt/radioconda
     become: yes
     become_user: mep
     when: not gnuradio_companion.stat.exists
