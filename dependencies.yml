@@ -11,6 +11,27 @@
       repo: ppa:deadsnakes/ppa
       state: present
 
+  - name: Add mozillateam PPA
+    apt_repository:
+      repo: ppa:mozillateam/ppa
+      state: present
+
+  - name: copy mozilla-firefox to /etc/apt/preferences.d
+    copy:
+      src: "files/apt-preferences-mozilla-firefox"
+      dest: /etc/apt/preferences.d/mozilla-firefox
+      mode: 0644
+      owner: root
+      group: root
+
+  - name: Disable unattended upgrades for firefox
+    lineinfile:
+      path: /etc/apt/apt.conf.d/51unattended-upgrades-firefox
+      state: present
+      create: true
+      regexp: '^Unattended-Upgrade'
+      line: 'Unattended-Upgrade::Allowed-Origins:: "LP-PPA-mozillateam:${distro_codename}";'
+
   - name: Update apt cache
     apt:
       update_cache: yes
