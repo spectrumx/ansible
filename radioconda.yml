@@ -8,7 +8,7 @@
 
   - name: Download radioconda script
     get_url:
-      url: "https://glare-sable.vercel.app/ryanvolz/radioconda/radioconda-.*-Linux-aarch64.sh"
+      url: "https://github.com/ryanvolz/radioconda/releases/download/2025.03.14/radioconda-2025.03.14-Linux-aarch64.sh"
       dest: /tmp/radioconda.sh
       mode: "0755"
     when: not gnuradio_companion.stat.exists
