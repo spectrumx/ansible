@@ -80,10 +80,8 @@ def run_compose_command(payload):
         if not error == '':
             print(error)
 
-        # Replace direct send_status call with timer
-        def delayed_status():
-            send_status(mqtt_client)
-        send_status_timer = threading.Timer(2.0, delayed_status)
+        # Send status after a delay, to account for  any changes or multiple calls
+        send_status_timer = threading.Timer(2.0, send_status)
         send_status_timer.daemon = True
         send_status_timer.start()
 
@@ -93,16 +91,21 @@ def run_compose_command(payload):
 def on_connect(client, userdata, flags, rc):
     print(f"{service_name} connected to mqtt: {rc}")
     client.subscribe(service_name + "/command")
-    send_status(client)
+
+    send_status_timer = threading.Timer(2.0, send_status)  # 2 second delay
+    send_status_timer.daemon = True
+    send_status_timer.start()
 
 def on_message(client, userdata, msg):
     global send_status_timer
     try:
         payload = msg.payload.decode()
         if 'announce' in msg.topic:
-            announce_data[msg.topic] = json.loads(payload)
+            # topic: announce/<container_name>
+            announce_data[msg.topic.split('/')[1]] = json.loads(payload)
             return
         elif 'status' in msg.topic:
+            # topic: <container_name>/status
             status_data[msg.topic.split('/')[0]] = json.loads(payload)
             return
         else:
@@ -113,42 +116,58 @@ def on_message(client, userdata, msg):
         # Debounce send_status: cancel previous timer and start a new one
         if send_status_timer is not None:
             send_status_timer.cancel()
-        def delayed_status():
-            send_status(client)
-        send_status_timer = threading.Timer(2.0, delayed_status)  # 2 second delay
+        send_status_timer = threading.Timer(2.0, send_status)  # 2 second delay
         send_status_timer.daemon = True
         send_status_timer.start()
     except Exception as err:
         print(f"Failed to parse incoming message: {msg.payload.decode()}\n{err}\n{traceback.format_exc()}")
 
-def send_status(client):
+def send_status():
+    global mqtt_client
+    '''
+    Fetch the list of running containers and some status information, sends to Icarus to be sent to server
+    '''
     try:
-        result = subprocess.run(["docker", "ps", "--format", "{{json .}}"], capture_output=True, text=True)
-        '''
-        Example docker ps output:
-        {
-        "Command": "\"python -u start.py\"",
-        "CreatedAt": "2025-05-06 15:15:01 +0000 UTC",
-        "ID": "6b9127a80bd0",
-        "Image": "randyherban/icarus:latest",
-        "Labels": "com.docker.compose.oneoff=False,com.docker.compose.project=docker,com.docker.compose.project.config_files=compose.yaml,com.docker.compose.project.working_dir=/opt/radiohound/docker,com.docker.compose.service=icarus,com.docker.compose.version=1.29.2,com.docker.compose.config-hash=8a3aaee136e9f0fa0acc880034e7bd9ce58220997f29d32963c5966f5a878693,com.docker.compose.container-number=1",
-        "LocalVolumes": "0",
-        "Mounts": "",
-        "Names": "icarus",
-        "Networks": "host",
-        "Ports": "",
-        "RunningFor": "29 hours ago",
-        "Size": "5.08kB (virtual 717MB)",
-        "State": "running",
-        "Status": "Up 8 minutes"
-        }
-        '''
+        containers_info = []
 
-        containers_info = [json.loads(line) for line in result.stdout.strip().splitlines()]
-        for container in containers_info:
-            name = container['Names']
-            if name in status_data:
-                container['RadioHoundStatus'] = status_data[name]
+        # Step 1: Get list of running containers
+        ps_output = subprocess.check_output(["docker", "ps", "--format", "{{.Names}}"]).decode("utf-8").strip().splitlines()
+
+        # Step 2: For each container, inspect and extract info
+        for name in ps_output:
+            try:
+                inspect_json = subprocess.check_output(["docker", "inspect", name]).decode("utf-8")
+                inspect_data = json.loads(inspect_json)[0]
+
+                # Extract build_version label if it exists
+                labels = inspect_data.get("Config", {}).get("Labels", {})
+                build_version = labels.get("build_version", "unknown")
+
+                container_record = {
+                    "name": name,
+                    "ID": inspect_data.get("Id"),
+                    "docker": {
+                        "build_version": build_version,
+                        "Created": inspect_data.get("Created"),
+                        "Image": inspect_data.get("Config", {}).get("Image"),
+                        "Status": inspect_data.get("State", {}).get("Status"),
+                        "CPUPercent": inspect_data.get("HostConfig", {}).get("CpuPercent")
+                    }
+                }
+
+                # Attach announce data if available
+                if name in announce_data:
+                    container_record["announce"] = announce_data[name]
+
+                # Attach status data if available
+                if name in status_data:
+                    container_record["status"] = status_data[name]
+
+                containers_info.append(container_record)
+
+            except subprocess.CalledProcessError as e:
+                print(f"Error inspecting container {name}: {e}")
+    
 
         payload = {
             "state": "online",
@@ -156,7 +175,7 @@ def send_status(client):
             "task_name": "tasks.admin.save_docker",
             "arguments": {"containers": containers_info},
         }
-        client.publish(service_name + "/status", json.dumps(payload), retain=True)
+        mqtt_client.publish(service_name + "/status", json.dumps(payload), retain=True)
     except Exception as e:
         print(f"Error fetching status: {e}")
 
