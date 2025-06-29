@@ -8,23 +8,34 @@
 
   - name: Download radioconda script
     get_url:
-      url: "https://glare-sable.vercel.app/ryanvolz/radioconda/radioconda-.*-Linux-aarch64.sh"
+      url: "https://github.com/ryanvolz/radioconda/releases/download/2025.03.14/radioconda-2025.03.14-Linux-aarch64.sh"
       dest: /tmp/radioconda.sh
       mode: "0755"
     when: not gnuradio_companion.stat.exists
 
-  - name: Run radioconda script (long)
-    command: /tmp/radioconda.sh -b -f -p /opt/radioconda -m
-    args:
-      creates: /opt/radioconda
-    when: not gnuradio_companion.stat.exists
-
-  - name: chown /opt/radioconda to mep
+  - name: create /opt/radioconda directory for mep user
     file:
       path: /opt/radioconda
       state: directory
       owner: mep
       group: mep
       mode: 0775
-      recurse: yes
+    when: not gnuradio_companion.stat.exists
+
+  - name: Run radioconda script (long)
+    command: /tmp/radioconda.sh -b -f -p /opt/radioconda
+    become: yes
+    become_user: mep
+    when: not gnuradio_companion.stat.exists
+
+  - name: Install radioconda shell hook
+    command: /opt/radioconda/bin/python -m conda init
+    become: yes
+    become_user: mep
+    when: not gnuradio_companion.stat.exists
+
+  - name: Disable radioconda shell auto-activation
+    command: /opt/radioconda/bin/python -m conda config --set auto_activate_base false
+    become: yes
+    become_user: mep
     when: not gnuradio_companion.stat.exists

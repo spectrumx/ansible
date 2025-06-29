@@ -1,13 +1,6 @@
 ---
-- hosts: localhost  
+- hosts: localhost
   tasks:
-
-    - name: Install Icarus Dependencies (Apt)
-      apt:
-        pkg:
-            - docker.io
-            - docker-compose
-        state: present
 
     - name: clone docker repository
       git:
@@ -65,7 +58,7 @@
       changed_when: false
 
     - name: Start Docker containers
-      shell: docker-compose up -d
+      shell: docker compose up -d
       args:
         chdir: /opt/radiohound/docker
       when: running_containers.stdout == ""
@@ -83,7 +76,7 @@
   handlers:
     - name: systemctl reload
       shell: /bin/systemctl daemon-reload
-        
+
     - name: start docker-control daemon
       systemd:
         name: docker-control

@@ -11,14 +11,30 @@
       repo: ppa:deadsnakes/ppa
       state: present
 
+  - name: Add mozillateam PPA
+    apt_repository:
+      repo: ppa:mozillateam/ppa
+      state: present
+
+  - name: copy mozilla-firefox to /etc/apt/preferences.d
+    copy:
+      src: "files/apt-preferences-mozilla-firefox"
+      dest: /etc/apt/preferences.d/mozilla-firefox
+      mode: 0644
+      owner: root
+      group: root
+
+  - name: Disable unattended upgrades for firefox
+    lineinfile:
+      path: /etc/apt/apt.conf.d/51unattended-upgrades-firefox
+      state: present
+      create: true
+      regexp: '^Unattended-Upgrade'
+      line: 'Unattended-Upgrade::Allowed-Origins:: "LP-PPA-mozillateam:${distro_codename}";'
+
   - name: Update apt cache
     apt:
       update_cache: yes
-
-  - name: Install Python 3.13
-    apt:
-      name: python3.13
-      state: present
 
   - name: Install Dependencies (Apt)
     apt:
@@ -48,10 +64,16 @@
           - iftop
           - backport-iwlwifi-dkms
           - firefox
-          - nvidia-container
-          - docker-compose-v2
-          - docker-buildx
+          - python3.13
+          - python3.13-dev
           - python3.13-venv
+          # docker
+          - nvidia-container
+          - docker-buildx
+          - docker-compose-v2
+          - docker.io
+          # tuner control
+          - libusb-1.0-0
       state: present
       update_cache: yes
 
@@ -61,7 +83,7 @@
   - name: Install Icarus Dependencies (Pip)
     pip:
       name:
-        - paho-mqtt>=1.5.1 
+        - paho-mqtt>=1.5.1
         - requests>=2.26.0
         - serial>=0.0.97
         - schedule>=0.6.0
@@ -76,6 +98,8 @@
         - digital_rf
         - spectrumx
         - docker
+        # tuner control
+        - adafruit-blinka
       state: present
       virtualenv: /opt/radiohound/python313
       virtualenv_python: python

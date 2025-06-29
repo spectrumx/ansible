@@ -86,7 +86,7 @@ def run_compose_command(payload):
         send_status_timer.start()
 
     except Exception as e:
-        print(f"Error running docker-compose command: {e}")
+        print(f"Error running docker compose command: {e}")
 
 def on_connect(client, userdata, flags, rc):
     print(f"{service_name} connected to mqtt: {rc}")
