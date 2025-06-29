@@ -73,6 +73,13 @@
         - systemctl reload
         - start docker-control daemon
 
+    - name: copy docker-control script
+      copy:
+        src: files/docker-control.py
+        dest: /usr/local/bin/docker-control.py
+        mode: '0755'
+      notify: Restart docker-control
+
   handlers:
     - name: systemctl reload
       shell: /bin/systemctl daemon-reload
@@ -82,3 +89,8 @@
         name: docker-control
         state: started
         enabled: yes
+
+    - name: Restart docker-control
+      systemd:
+        name: docker-control
+        state: restarted

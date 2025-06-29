@@ -7,7 +7,7 @@ StartLimitBurst=60
 
 [Service]
 Type=simple
-ExecStart=/opt/radiohound/python313/bin/python -B /opt/ansible/files/docker-control.py
+ExecStart=/opt/radiohound/python313/bin/python -B /usr/local/bin/docker-control.py
 Environment=CI=true
 Restart=always
 RestartSec=10
