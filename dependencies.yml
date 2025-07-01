@@ -74,8 +74,6 @@
           - docker.io
           # tuner control
           - libusb-1.0-0
-          # rfsoc control
-          - pyzmq
       state: present
       update_cache: yes
 
@@ -102,6 +100,8 @@
         - docker
         # tuner control
         - adafruit-blinka
+        # rfsoc control
+        - pyzmq
       state: present
       virtualenv: /opt/radiohound/python313
       virtualenv_python: python
