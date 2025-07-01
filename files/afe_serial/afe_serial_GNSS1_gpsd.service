@@ -4,6 +4,6 @@ Requires=afe_serial_ttybus.service
 After=afe_serial_ttybus.service
 
 [Service]
-Type=exec
+Type=forking
 ExecStart=/opt/ttybus/tty_fake -d -s /tmp/ttyGNSS1mux /dev/ttyGNSS1gpsd
 Restart=always

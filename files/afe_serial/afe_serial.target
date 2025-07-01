@@ -1,5 +1,5 @@
 [Unit]
-Description=Duplicate AFE serial device
+Description=Set up AFE serial devices
 Requires=afe_serial_ttybus.service afe_serial_attach.service afe_serial_GNSS1_gpsd.service afe_serial_GNSS1_control.service
 After=afe_serial_ttybus.service afe_serial_attach.service afe_serial_GNSS1_gpsd.service afe_serial_GNSS1_control.service
 Before=gpsd.socket

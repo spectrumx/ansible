@@ -2,6 +2,6 @@
 Description=ttybus for AFE serial interface
 
 [Service]
-Type=exec
+Type=forking
 ExecStart=/opt/ttybus/tty_bus -d -s /tmp/ttyGNSS1mux
 Restart=always

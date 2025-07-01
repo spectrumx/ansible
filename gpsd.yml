@@ -64,7 +64,7 @@
 
   - name: start afe_serial
     systemd:
-      name: afe_serial
+      name: afe_serial.target
       state: started
       enabled: yes
 
