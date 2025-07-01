@@ -23,6 +23,18 @@
       name: gpsd
       enabled: true
 
+  - name: Clone ttybus
+    git:
+      repo: https://github.com/danielinux/ttybus
+      dest: /opt/ttybus
+      update: no
+
+  - name: Build ttybus
+    command:
+      chdir: /opt/ttybus
+      cmd: make
+      creates: /opt/ttybus/tty_bus
+
   - name: copy afe_serial target and services
     copy:
       src: "{{ item }}"
