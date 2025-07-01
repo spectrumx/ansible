@@ -7,6 +7,7 @@
         repo: git@github.com:spectrumx/docker.git
         dest: /opt/radiohound/docker
         update: yes
+        force: yes
         key_file: /opt/radiohound/.ssh/id_rsa
         accept_hostkey: yes
 
