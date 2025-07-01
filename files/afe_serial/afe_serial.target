@@ -1,0 +1,8 @@
+[Unit]
+Description=Duplicate AFE serial device
+Requires=afe_serial_ttybus.service afe_serial_attach.service afe_serial_GNSS1_gpsd.service afe_serial_GNSS1_control.service
+After=afe_serial_ttybus.service afe_serial_attach.service afe_serial_GNSS1_gpsd.service afe_serial_GNSS1_control.service
+Before=gpsd.socket
+
+[Install]
+WantedBy=multi-user.target

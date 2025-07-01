@@ -10,15 +10,31 @@
       state: present
       update_cache: no
 
-  # - name: Copy dhcpd.conf
-  #   copy:
-  #     src: "files/dhcpd.conf"
-  #     dest: /etc/dhcp/dhcpd.conf
-  #     owner: root
-  #     group: root
-  #   notify: 
-  #     - restart dhcpd
+  - name: copy gpsd configuration
+    copy:
+      src: "files/gpsd"
+      dest: /etc/default/gpsd
+      mode: 0644
+      owner: root
+      group: root
 
+  - name: Enable gpsd.service
+    systemd:
+      name: gpsd
+      enabled: true
+
+  - name: copy afe_serial target and services
+    copy:
+      src: "{{ item }}"
+      dest: "/etc/systemd/system/"
+      mode: 0644
+      owner: root
+      group: root
+    with_fileglob:
+      - "files/afe_serial/*"
+    notify:
+      - systemctl reload
+      - start afe_serial
 
   - name: Configure chrony
     blockinfile:
@@ -30,6 +46,15 @@
       - Restart chrony
 
   handlers:
+
+  - name: systemctl reload
+    shell: /bin/systemctl daemon-reload
+
+  - name: start afe_serial
+    systemd:
+      name: afe_serial
+      state: started
+      enabled: yes
 
   - name: Restart chrony
     systemd:

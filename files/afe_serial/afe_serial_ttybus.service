@@ -1,0 +1,7 @@
+[Unit]
+Description=ttybus for AFE serial interface
+
+[Service]
+Type=exec
+ExecStart=/opt/ttybus/tty_bus -d -s /tmp/ttyGNSS1mux
+Restart=always
