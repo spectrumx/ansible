@@ -1,5 +1,5 @@
 ---
-- hosts: localhost  
+- hosts: localhost
   tasks:
 
     - name: Add mep user
@@ -87,9 +87,10 @@
       git:
         repo: git@github.com:spectrumx/mep-examples.git
         dest: /opt/mep-examples
-        update: no
+        update: yes
         key_file: /opt/radiohound/.ssh/git_key
         accept_hostkey: yes
+      ignore_errors: true
       register: git_clone_mep_examples
 
     - name: chown /opt/mep-examples to mep
