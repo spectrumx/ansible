@@ -88,7 +88,6 @@
         state: directory
         owner: mep
         group: mep
-        mode: 0775
         recurse: yes
 
     - name: Clone mep-examples repository
