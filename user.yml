@@ -66,7 +66,15 @@
         group: mep
         mode: 0777
 
-    - name: Create /data for ring buffers
+    - name: Create /data/telemetry_log for telemetry
+      file:
+        path: /data/telemetry_log
+        state: directory
+        owner: mep
+        group: mep
+        mode: 0777
+
+    - name: Create /data/recordings for archive
       file:
         path: /data/recordings
         state: directory
