@@ -6,4 +6,4 @@ DEVICES="/dev/ttyGNSS1gpsd"
 GPSD_OPTIONS="--nowait --badtime --readonly --speed 460800 -D 3"
 
 # Automatically hot add/remove USB GPS devices via gpsdctl
-USBAUTO="true"
+USBAUTO="false"
