@@ -1,7 +1,9 @@
 [Unit]
 Description=Set up AFE serial devices
-Requires=afe_serial_ttybus.service afe_serial_attach.service afe_serial_GNSS1_gpsd.service afe_serial_GNSS1_control.service
+BindsTo=afe_serial_ttybus.service afe_serial_attach.service afe_serial_GNSS1_gpsd.service afe_serial_GNSS1_control.service
 After=afe_serial_ttybus.service afe_serial_attach.service afe_serial_GNSS1_gpsd.service afe_serial_GNSS1_control.service
+PropagatesReloadTo=afe_serial_ttybus.service afe_serial_attach.service afe_serial_GNSS1_gpsd.service afe_serial_GNSS1_control.service
+PropagatesStopTo=afe_serial_ttybus.service afe_serial_attach.service afe_serial_GNSS1_gpsd.service afe_serial_GNSS1_control.service
 Before=gpsd.socket
 
 [Install]

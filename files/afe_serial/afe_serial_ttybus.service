@@ -1,5 +1,6 @@
 [Unit]
 Description=ttybus for AFE serial interface
+BindsTo=dev-ttyGNSS1.device
 
 [Service]
 Type=forking
