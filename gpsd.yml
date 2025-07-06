@@ -56,7 +56,7 @@
         manual
         refclock SHM 0 refid SHM0 precision 1e-1 delay 0.2
         refclock SHM 1 refid SHM1 precision 1e-7
-        refclock PPS /dev/pps1 refid PPS precision 1e-7 offset 0.293
+        #refclock PPS /dev/pps1 refid PPS precision 1e-7 offset 0.293
         allow 192.168.0.0/16
     notify:
       - Restart chrony
