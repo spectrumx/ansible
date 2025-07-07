@@ -115,6 +115,33 @@
     when: "'nvidia' not in docker_runtimes.stdout"
     shell:  service docker restart
 
+  - name: Create /opt/afe AFE software
+    file:
+      path: /opt/afe
+      state: directory
+      owner: mep
+      group: mep
+      mode: 0777
+
+  - name: copy afe_service software
+    copy:
+      src: "files/afe_service.py"
+      dest: "/opt/afe/afe_service.py"
+      mode: 0755
+      owner: mep
+      group: mep
+
+  - name: copy afe_control service
+    copy:
+      src: "files/afe_control.service"
+      dest: "/etc/systemd/system/afe_control.service"
+      mode: 0644
+      owner: root
+      group: root
+    notify:
+      - systemctl reload
+      - start afe_control
+
   - name: Remove unnecessary packages
     apt:
       pkg:
@@ -122,83 +149,15 @@
         - nftables
       state: absent
 
-  # - name: Install Utilities (Pip)
-  #   pip:
-  #     name:
-  #       - jetson-stats
-  #   async: 120
-  #   poll: 5
-  #   register: jetson_stats_watcher
+  handlers:
 
-  # - name: Check jetson-stats install
-  #   async_status:
-  #     jid: "{{ jetson_stats_watcher.ansible_job_id }}"
-  #   register: jetson_stats_result
-  #   until: jeton_status_result.finished
-  #   retries: 60  # Adjust based on your needs
-  #   delay: 10
-  #   failed_when: jetson_status_result.rc is not defined and retries == 60
+  - name: systemctl reload
+    shell: /bin/systemctl daemon-reload
 
-  # - name: Handle jetson-stats timeout
-  #   command: /usr/sbin/service jtop stop
-  #   when: jeton_status_result.rc is not defined
-
-
-  # - name: Install uv
-  #   shell: "files/uv-install.sh"
-
-
-  # - name: Clone holohub repository
-  #   git:
-  #     repo: 'https://github.com/ryanvolz/holohub.git'
-  #     dest: /opt/holohub
-  #     update: yes
-  #     version: "mep"
-  #     accept_hostkey: yes
-  #   ignore_errors: yes
-  #   register: run_holohub_setup
-
-
-  # - name: Add git safe.directory to holohub repo
-  #   shell: GIT_DIR=/opt/holohub/.git GIT_WORK_TREE=/opt/holohub git config --add safe.directory "/opt/holohub"
-  #   when: not run_holohub_setup.before
-
-
-  # - name: Setup holohub
-  #   command:
-  #     cmd: ./run setup
-  #     chdir: /opt/holohub
-  #   when: run_holohub_setup
-
-
-  # - name: Check if dpdk is installed
-  #   ansible.builtin.command:
-  #     cmd: dpkg-query -W -f='${Version}' dpdk-for-jetson
-  #   register: dpdk_check
-  #   ignore_errors: yes
-
-  # - name: Download dpdk
-  #   ansible.builtin.command:
-  #     cmd: wget https://github.com/spectrumx/ansible/releases/download/deps-20241112/dpdk-for-jetson_22.11.6-1ubuntu2_arm64.deb -O /tmp/dpdk-for-jetson_22.11.6-1ubuntu2_arm64.deb
-  #     warn: false
-  #   when: dpdk_check.stdout != "22.11.6-1ubuntu2"
-
-  # - name: Install dpdk
-  #   apt:
-  #     deb: /tmp/dpdk-for-jetson_22.11.6-1ubuntu2_arm64.deb
-  #     state: present
-  #   when: dpdk_check.stdout != "22.11.6-1ubuntu2"
-
-  # - name: Install holohub (long)
-  #   command:
-  #     cmd: './run build mimo_radar_pipeline --configure-args "-DMATX_EN_PYBIND11=ON -DPYBIND11_FINDPYTHON=ON -DPython_EXECUTABLE=/usr/bin/python3 -DPython_ROOT_DIR=/usr/lib/python3"'
-  #     chdir: /opt/holohub
-  #   when: run_holohub_setup
-
-  # - name: Holohub setcap
-  #   command:
-  #     cmd: 'setcap cap_net_raw,cap_dac_override,cap_dac_read_search,cap_ipc_lock,cap_sys_admin+ep ./build/applications/mimo_radar_pipeline/cpp/mimo_radar_pipeline'
-  #     chdir: /opt/holohub
-  #   when: run_holohub_setup
+  - name: start afe_control
+    systemd:
+      name: afe_control.service
+      state: started
+      enabled: yes
 
 
