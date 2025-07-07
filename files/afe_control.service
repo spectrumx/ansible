@@ -5,4 +5,6 @@ BindsTo=dev-ttyGNSS1.device
 [Service]
 Type=exec
 ExecStart=/usr/bin/python3 /opt/afe/afe_service.py
+User=mep
+Group=mep
 Restart=always
