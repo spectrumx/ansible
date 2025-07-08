@@ -38,6 +38,12 @@
       - systemctl reload
       - start system_mem_guard
 
+  - name: Mask system_mem_guard
+    systemd:
+      name: system_mem_guard.service
+      state: stopped
+      masked: true
+
   handlers:
 
   - name: systemctl reload
