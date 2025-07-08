@@ -8,3 +8,6 @@ ExecStart=/usr/bin/python3 /opt/afe/afe_service.py
 User=mep
 Group=mep
 Restart=always
+
+[Install]
+WantedBy=multi-user.target

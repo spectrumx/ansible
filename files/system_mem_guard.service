@@ -1,0 +1,11 @@
+[Unit]
+Description=System memory guard
+
+[Service]
+Type=exec
+ExecStart=/usr/bin/bash /opt/system_mem_guard.bash
+EnvironmentFile=/etc/default/system_mem_guard
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
