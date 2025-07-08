@@ -86,7 +86,6 @@
       name:
         - paho-mqtt>=1.5.1
         - requests>=2.26.0
-        - serial>=0.0.97
         - schedule>=0.6.0
         - inotify>=0.2.10
         - scipy>=1.8.0
@@ -101,6 +100,7 @@
         - docker
         # tuner control
         - adafruit-blinka
+        - pyserial
         # rfsoc control
         - pyzmq
       state: present
