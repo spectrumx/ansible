@@ -152,6 +152,13 @@
       owner: root
       group: root
 
+  - name: Add system_mem_guard configuration file
+    blockinfile:
+      path: /etc/default/system_mem_guard
+      state: present
+      block: |
+        THRESHOLD_MB=512
+
   - name: copy system_mem_guard.service
     copy:
       src: "files/system_mem_guard.service"
