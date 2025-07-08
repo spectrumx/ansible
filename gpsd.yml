@@ -55,7 +55,7 @@
     systemd:
       name: afe_serial.target
       state: stopped
-      masked: true
+      enabled: false
 
   - name: Configure chrony
     blockinfile:
