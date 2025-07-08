@@ -30,7 +30,7 @@
 
   handlers:
 
-  - name: sEnable afe_control
+  - name: Enable afe_control
     systemd:
       name: afe_control.service
       daemon_reload: yes
