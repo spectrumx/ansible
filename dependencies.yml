@@ -81,7 +81,15 @@
   - name: Create a virtual environment
     command: python3.13 -m venv /opt/radiohound/python313
 
-  - name: Install Icarus Dependencies (Pip)
+  - name: Remove interfering Pytohn dependencies (Pip)
+    pip:
+      name:
+        - serial
+      state: absent
+      virtualenv: /opt/radiohound/python313
+      virtualenv_python: python
+
+  - name: Install Python Dependencies (Pip)
     pip:
       name:
         - paho-mqtt>=1.5.1
