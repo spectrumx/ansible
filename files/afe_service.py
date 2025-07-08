@@ -10,7 +10,7 @@
 #
 # List of Functions:
 #
-#   open_port                
+#   open_port
 #   log_telemetry
 #   ctrlc
 #   print_help
@@ -38,7 +38,8 @@ import csv
 
 SOCKET_PATH = '/tmp/afe_service.sock'
 
-uart_port = '/dev/ttyGNSS1control' # for MEPs updated after 07-01-2025, otherwise change as needed
+#uart_port = '/dev/ttyGNSS1control' # for MEPs updated after 07-01-2025, otherwise change as needed
+uart_port = '/dev/ttyGNSS1'
 uart_baud =  460800 # formerly 921600, changed for GPSD requirements
 timeout = 1.0    # increase to 1.5 for desperate debugging
 global rate
@@ -62,7 +63,7 @@ def write_uart(msg):
   last_write = now
 
 class Telemetry:
-    
+
     def __init__(self):
         self.telem = []
         self.registers = []
@@ -88,14 +89,14 @@ class Telemetry:
       msg_end = False
 
       while msg_end == False:
-        
+
         line = uart.readline()
 
         if line:
           lineStr = line.decode()
           print(lineStr)
 
-          try: 
+          try:
             if (lineStr[1] == 'G') or (lineStr[5] in ('T', 'M', 'H', 'A', 'G')):
               self.add_telem(lineStr)
             line = None
@@ -107,11 +108,11 @@ class Telemetry:
               self.NMEAtime = int(lineStr[9:19])
             else:
               self.NMEAtime = int(datetime.now(timezone.utc).timestamp())
-            msg_end = True  
+            msg_end = True
 
     def size(self):
         return len(self.telem)
-    
+
     def print(self):
 
       self.request_telem()
@@ -119,18 +120,18 @@ class Telemetry:
       request_reg_states()
 
       return np.stack(self.telem, self.registers)
-    
+
     def log(self):
-        
+
         global new_run
 
         global path
-        
+
         self.request_telem()
 
         if len(self.registers) == 0:
           request_reg_states()
-        
+
         t = datetime.fromtimestamp(self.NMEAtime, tz=timezone.utc)
         timestamp = t.strftime("%Y-%m-%d_%H:%M:%S")
 
@@ -156,7 +157,7 @@ class Telemetry:
               writer.writerow(line)
             except IndexError as e:
               print("Index Error on: ", line)
-            
+
 #          writer.writerow(<tuner>) # ADD TUNER TELEM HERE
 
           for row in range(7):
@@ -175,10 +176,10 @@ class Telemetry:
             for column in range(10):
               state = self.registers[row][column]
               line.append(state)
-            
-            writer.writerow(line) 
+
+            writer.writerow(line)
             line = []
-        
+
         print(self.registers)
         print(np.stack(self.telem))
         print("Telemetry logged at: ", filename) # /data/metadata
@@ -188,12 +189,12 @@ global_telemetry = Telemetry()
 def handle_commands(conn):
 
   global rate
-  
+
   raw = conn.recv(1024)
   if not raw:
     conn.close()
     return
-  
+
   command = raw.decode('utf-8', errors='ignore').split()
 
   block, channel, addr, bit = map(int, command)
@@ -211,7 +212,7 @@ def handle_commands(conn):
     conn.sendall(b"Placeholder\n")
 
   elif block == 4:
-    
+
     global_telemetry.log()
     conn.sendall(b"Telemetry logged\n")
 
@@ -225,12 +226,12 @@ def handle_commands(conn):
   conn.close()
 
 def start_command_server():
-  
+
   try:
     os.remove(SOCKET_PATH)
   except OSError:
     pass
-  
+
   server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
   server.bind(SOCKET_PATH)
   server.listen(1)
@@ -271,8 +272,8 @@ def reduce(iterable, initializer=None):
     return value
 
 def eval_packet(packet,gen_cksm_f=False,debug_f=False):
-     err_code = 0 
-     ascii_checksum = 0 
+     err_code = 0
+     ascii_checksum = 0
      calculated_checksum = 0
      verbose_f = False
 
@@ -294,13 +295,13 @@ def eval_packet(packet,gen_cksm_f=False,debug_f=False):
            pass #print("number of sentences in data:",dollar_cnt,"len=",len(packet))
          # endif
      else:                                       # pre-checked, should not happen
-       print("data does not begin with '$'", dollar_cnt, star_cnt) 
+       print("data does not begin with '$'", dollar_cnt, star_cnt)
        err_code = -2
      # end else error
 
      if (err_code == 0):
        packet = packet.strip("$\n")
-       
+
        nmeadata, ascii_checksum = packet.split("*",1)
        if (debug_f):
            print("nmeadata=", nmeadata)
@@ -318,14 +319,14 @@ def eval_packet(packet,gen_cksm_f=False,debug_f=False):
          # end except
        else:
          pass   # no checksum to extract
-       # else no checksum 
+       # else no checksum
      # endif not error
-      
+
      if (err_code == 0):
        calculated_checksum = reduce((ord(s) for s in nmeadata), 0)
        if (checksum == calculated_checksum):
          if (debug_f):
-           print("success,checksum=",hex(checksum),                                   
+           print("success,checksum=",hex(checksum),
                                      hex(calculated_checksum),
                                      ascii_checksum)
          # endif debug
@@ -333,11 +334,11 @@ def eval_packet(packet,gen_cksm_f=False,debug_f=False):
          if (not gen_cksm_f):   # compare generated vs read
            err_code = -4
            if (debug_f):
-             print("err: ck(2)") 
-           # endif 
+             print("err: ck(2)")
+           # endif
            if (debug_f or verbose_f):
              print("The NMEA cksum != calc cksum:(bin,calc,read)",
-                                       hex(checksum),                                   
+                                       hex(checksum),
                                        hex(calculated_checksum),
                                        ascii_checksum)
            # endif debug
@@ -348,7 +349,7 @@ def eval_packet(packet,gen_cksm_f=False,debug_f=False):
            # endif debug
          # end else use manufactured checksum
        # end else bad checksum
-     # endif parse passes checks  
+     # endif parse passes checks
      return err_code, ascii_checksum, calculated_checksum
 
 def add_cksum(pkt_in):
@@ -366,7 +367,7 @@ def add_cksum(pkt_in):
   if ( len(ck_str) == 1):       # if single digit
     ck_str = "0" + ck_str       # then prefix with '0', ex: "0A"
   # endif single digit
-    
+
   packet_out = pkt_in + ck_str
 
   return packet_out
@@ -388,7 +389,7 @@ def write_max(block, channel, addr, bit):
 
   else:
     return 0
-  
+
   msg_draft += "," + str(addr) + "," + str(bit) + "*"
   msg = add_cksum(msg_draft)
 
@@ -401,7 +402,7 @@ def write_max(block, channel, addr, bit):
 def request_reg_states():
 
   main_reg = []
-  
+
   tx1_reg = []
   tx2_reg = []
 
@@ -520,7 +521,7 @@ def main():
   global_telemetry.log()
 
   threading.Timer(rate, tick).start()
-  
+
   #while True:
 
 if __name__ == '__main__':

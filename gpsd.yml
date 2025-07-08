@@ -18,10 +18,12 @@
       owner: root
       group: root
 
-  - name: Enable gpsd.service
+  - name: Disable gpsd.service
+    #name: Enable gpsd.service
     systemd:
       name: gpsd
-      enabled: true
+      #enabled: true
+      enabled: false
 
   - name: Clone ttybus
     git:
@@ -47,6 +49,11 @@
     notify:
       - systemctl reload
       - start afe_serial
+
+  - name: Disable afe_serial.target
+    systemd:
+      name: afe_serial.target
+      enabled: false
 
   - name: Configure chrony
     blockinfile:
