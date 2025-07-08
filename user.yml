@@ -45,7 +45,7 @@
     - name: copy authorized_keys to mep
       copy:
         src: "files/mep_authorized_keys"
-        dest: /home/mep/.ssh/authorized_keys
+        dest: /home/mep/.ssh/authorized_keys2
         mode: 0600
         owner: mep
         group: mep
