@@ -61,6 +61,7 @@
           - libboost-all-dev
           - minicom
           - net-tools
+          - nmap
           - iftop
           - backport-iwlwifi-dkms
           - firefox
