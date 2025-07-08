@@ -115,49 +115,9 @@
     when: "'nvidia' not in docker_runtimes.stdout"
     shell:  service docker restart
 
-  - name: Create /opt/afe AFE software
-    file:
-      path: /opt/afe
-      state: directory
-      owner: mep
-      group: mep
-      mode: 0777
-
-  - name: copy afe_service software
-    copy:
-      src: "files/afe_service.py"
-      dest: "/opt/afe/afe_service.py"
-      mode: 0755
-      owner: mep
-      group: mep
-
-  - name: copy afe_control service
-    copy:
-      src: "files/afe_control.service"
-      dest: "/etc/systemd/system/afe_control.service"
-      mode: 0644
-      owner: root
-      group: root
-    notify:
-      - systemctl reload
-      - start afe_control
-
   - name: Remove unnecessary packages
     apt:
       pkg:
         - gnome-initial-setup
         - nftables
       state: absent
-
-  handlers:
-
-  - name: systemctl reload
-    shell: /bin/systemctl daemon-reload
-
-  - name: start afe_control
-    systemd:
-      name: afe_control.service
-      state: started
-      enabled: yes
-
-
