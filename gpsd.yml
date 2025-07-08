@@ -47,15 +47,16 @@
       group: root
     with_fileglob:
       - "files/afe_serial/*"
-    notify:
-      - systemctl reload
-      - start afe_serial
 
-  - name: Mask afe_serial.target
+  - name: Disable afe_serial.target
+    #name: Enable afe_serial.target
     systemd:
       name: afe_serial.target
+      daemon_reload: true
       state: stopped
       enabled: false
+      #state: started
+      #enabled: true
 
   - name: Configure chrony
     blockinfile:
@@ -71,15 +72,6 @@
       - Restart chrony
 
   handlers:
-
-  - name: systemctl reload
-    shell: /bin/systemctl daemon-reload
-
-  - name: start afe_serial
-    systemd:
-      name: afe_serial.target
-      state: started
-      enabled: yes
 
   - name: Restart chrony
     systemd:
