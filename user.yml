@@ -66,6 +66,14 @@
         group: mep
         mode: 0777
 
+    - name: Create /data/ringbuffer for incoming data
+      file:
+        path: /data/ringbuffer
+        state: directory
+        owner: mep
+        group: mep
+        mode: 0777
+
     - name: Create /data/telemetry_log for telemetry
       file:
         path: /data/telemetry_log
