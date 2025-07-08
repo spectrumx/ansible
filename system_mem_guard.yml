@@ -38,23 +38,10 @@
       - systemctl reload
       - start system_mem_guard
 
-  - name: Remove unnecessary packages
-    apt:
-      pkg:
-        - gnome-initial-setup
-        - nftables
-      state: absent
-
   handlers:
 
   - name: systemctl reload
     shell: /bin/systemctl daemon-reload
-
-  - name: start afe_control
-    systemd:
-      name: afe_control.service
-      state: started
-      enabled: yes
 
   - name: start system_mem_guard
     systemd:
