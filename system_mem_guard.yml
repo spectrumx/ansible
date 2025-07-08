@@ -1,0 +1,63 @@
+---
+- hosts: localhost
+  tasks:
+
+  # system_mem_guard is a temporary solution that should be removed when
+  # the memory hog is tracked down and fixed
+  - name: copy system_mem_guard script
+    copy:
+      src: "files/system_mem_guard.bash"
+      dest: "/opt/system_mem_guard.bash"
+      mode: 0755
+      owner: root
+      group: root
+
+  - name: Create system_mem_guard configuration file
+    file:
+      path: /etc/default/system_mem_guard
+      state: touch
+      mode: 0644
+      owner: root
+      group: root
+
+  - name: Add system_mem_guard configuration
+    blockinfile:
+      path: /etc/default/system_mem_guard
+      state: present
+      block: |
+        THRESHOLD_MB=512
+
+  - name: copy system_mem_guard.service
+    copy:
+      src: "files/system_mem_guard.service"
+      dest: "/etc/systemd/system/system_mem_guard.service"
+      mode: 0644
+      owner: root
+      group: root
+    notify:
+      - systemctl reload
+      - start system_mem_guard
+
+  - name: Remove unnecessary packages
+    apt:
+      pkg:
+        - gnome-initial-setup
+        - nftables
+      state: absent
+
+  handlers:
+
+  - name: systemctl reload
+    shell: /bin/systemctl daemon-reload
+
+  - name: start afe_control
+    systemd:
+      name: afe_control.service
+      state: started
+      enabled: yes
+
+  - name: start system_mem_guard
+    systemd:
+      name: system_mem_guard.service
+      state: started
+      enabled: yes

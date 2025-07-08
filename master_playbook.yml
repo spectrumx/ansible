@@ -8,6 +8,7 @@
 - import_playbook: docker.yml       # Setup Docker and pull containers
 #- import_playbook: icarus.yml       # sensing platform script - now handled in Docker
 - import_playbook: radioconda.yml   # GNURadio
+- import_playbook: system_mem_guard.yml
 
 
 
