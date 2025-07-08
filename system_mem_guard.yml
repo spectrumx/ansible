@@ -34,23 +34,13 @@
       mode: 0644
       owner: root
       group: root
-    notify:
-      - systemctl reload
-      - start system_mem_guard
 
   - name: Disable system_mem_guard
+    #name: Enable system_mem_guard
     systemd:
       name: system_mem_guard.service
+      daemon_reload: true
       state: stopped
       enabled: false
-
-  handlers:
-
-  - name: systemctl reload
-    shell: /bin/systemctl daemon-reload
-
-  - name: start system_mem_guard
-    systemd:
-      name: system_mem_guard.service
-      state: started
-      enabled: yes
+      #state: started
+      #enabled: true
