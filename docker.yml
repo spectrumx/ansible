@@ -44,13 +44,13 @@
     - name: Replace UID and GID in .env
       ansible.builtin.replace:
         path: /opt/radiohound/docker/.env
-        regexp: 'UID=MEP_UID'
+        regexp: 'UID=.*'
         replace: "UID={{ mep_uid.stdout }}"
 
     - name: Replace GID in .env
       ansible.builtin.replace:
         path: /opt/radiohound/docker/.env
-        regexp: 'GID=MEP_GID'
+        regexp: 'GID=.*'
         replace: "GID={{ mep_gid.stdout }}"
 
     - name: Check if any containers are running
