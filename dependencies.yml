@@ -82,13 +82,15 @@
   - name: Create a virtual environment
     command: python3.13 -m venv /opt/radiohound/python313
 
-  - name: Remove interfering Pytohn dependencies (Pip)
+  - name: Remove interfering Python dependencies (Pip)
     pip:
       name:
         - serial
       state: absent
       virtualenv: /opt/radiohound/python313
       virtualenv_python: python
+    notify:
+      - Reinstall pyserial
 
   - name: Install Python Dependencies (Pip)
     pip:
@@ -131,3 +133,12 @@
         - gnome-initial-setup
         - nftables
       state: absent
+
+  handlers:
+  - name: Reinstall pyserial
+    pip:
+      name:
+        - pyserial
+      state: forcereinstall
+      virtualenv: /opt/radiohound/python313
+      virtualenv_python: python
