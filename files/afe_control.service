@@ -1,6 +1,7 @@
 [Unit]
 Description=Analog Frontend controller service
-Requires=dev-ttyGNSS1.device
+BindsTo=dev-ttyGNSS1.device
+After=dev-ttyGNSS1.device
 
 [Service]
 Type=exec
