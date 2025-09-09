@@ -92,7 +92,7 @@
 # Disable DHCP server on powder host
   - name: copy /etc/NetworkManager/system-connections for powder
     copy:
-      src: "files/NetworkManager/powder.nmconnection"
+      src: "files/NetworkManager/External DHCP powder.nmconnection"
       dest: /etc/NetworkManager/system-connections/External DHCP.nmconnection
       mode: 0600
       owner: root
