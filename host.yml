@@ -97,7 +97,7 @@
       mode: 0600
       owner: root
       group: root
-    when: actual_hostname == '860e'
+    when: actual_hostname == 'b081'
 
   - name: copy /etc/NetworkManager/dnsmasq-shared.d
     copy:
