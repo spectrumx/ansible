@@ -31,6 +31,8 @@ if not config.has_section("all"):
 config.set("all",hostname,None)
 with open("inventory/inventory-runtime.ini", "w") as configfile:    # save
   config.set("all","; Hosts will be automatically added to 'all' group via Ansible run script and should be added to additinal groups in Git if required.", None)
+  if config.has_section("plugin:ini"):
+    config.remove_section("plugin:ini")
   config.write(configfile)
 
 

@@ -89,6 +89,16 @@
       owner: root
       group: root
 
+# Disable DHCP server on powder host
+  - name: copy /etc/NetworkManager/system-connections for powder
+    copy:
+      src: "files/NetworkManager/powder.nmconnection"
+      dest: /etc/NetworkManager/system-connections/External DHCP.nmconnection
+      mode: 0600
+      owner: root
+      group: root
+    when: actual_hostname == '860e'
+
   - name: copy /etc/NetworkManager/dnsmasq-shared.d
     copy:
       src: "files/NetworkManager/dnsmasq-shared.d/"
