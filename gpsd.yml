@@ -69,7 +69,7 @@
       state: present
       block: |
         manual
-        refclock SHM 0 refid GNSS precision 1e-1 delay 0.2
+        refclock SHM 0 refid GNSS precision 1e-1 offset 0.25 delay 0.2
         refclock SHM 1 refid PPS precision 1e-7
         allow 192.168.0.0/16
     notify:
