@@ -48,7 +48,7 @@
 
   - name: Remove ttybus and afe_serial systemd services
     file:
-      path: '{{ item.path }}'
+      path: '{{ item }}'
       state: absent
     loop:
       - /opt/ttybus
