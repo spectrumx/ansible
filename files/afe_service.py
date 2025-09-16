@@ -24,7 +24,7 @@
 #    # Automatically hot add/remove USB GPS devices via gpsdctl
 #    USBAUTO="false"
 #
-# - /opt/ansible/gpsd.yml must include the following tasks 
+# - /opt/ansible/gpsd.yml must include the following tasks
 #   AFTER "Deploy gpsd default configuration" and
 #   BEFORE "Enable gpsd.service":
 #
@@ -33,7 +33,7 @@
 #       name: "mepuser"
 #       groups: "gpsd"
 #       append: true
-#        
+#
 #   - name: Create systemd directory for gpsd.socket
 #     file:
 #       path: /etc/systemd/system/gpsd.socket.d
@@ -113,7 +113,7 @@ telem_in_progress = True
 regs_in_progress = True
 
 def send_nmea_command(cmd_str):
-  
+
   if not cmd_str.endswith("\r\n"):
     cmd_str += "\r\n"
 
@@ -124,9 +124,9 @@ def send_nmea_command(cmd_str):
   gpsd_out.connect("/var/run/gpsd.sock")
 
   gpsd_out.sendall(message.encode("ascii"))
-  
+
   reply = gpsd_out.recv(4096).decode("ascii").strip()
-  
+
   if reply != "OK":
     raise RuntimeError(f"gpsd error on send. reply: {reply}")
 
@@ -196,7 +196,7 @@ class Telemetry:
             time.sleep(0.001)
 
       for row in range(7):
-          
+
         if row == 0:
           tag = "MAINREG:"
 
@@ -209,7 +209,7 @@ class Telemetry:
           tag = "RX" + idx + "REG: "
 
         all_items.append(tag + str(self.registers[i]))
-      
+
       return all_items
 
     def log(self):
@@ -221,10 +221,10 @@ class Telemetry:
         global regs_in_progress
 
         self.request_telem()
-        self.request_registers() 
+        self.request_registers()
 
         telem_in_progress = True
-        regs_in_progress = True       
+        regs_in_progress = True
 
         start = time.monotonic()
         wait = 0
@@ -234,7 +234,7 @@ class Telemetry:
 
         if self.RTCtime is None:
           self.RTCtime = int(datetime.now(timezone.utc).timestamp())
-        
+
         t = datetime.fromtimestamp(self.RTCtime, tz=timezone.utc)
         timestamp = t.strftime("%Y-%m-%d_%H:%M:%S")
 
@@ -374,10 +374,10 @@ def gpsd_monitor():
   msg = gpsd.makefile('r', encoding='ascii', newline='\n')
   _ = msg.readline()
 
-  for line in msg:     
-          
+  for line in msg:
+
     line = line.strip()
-          
+
     if line.startswith('$PGPS'):
       gps_in_progress = True
       if global_telemetry.gps is not None:
@@ -432,10 +432,11 @@ def nmea_to_epoch(nmea):
 
     dt = datetime(YY, MM, DD, hh, mm, ss, tzinfo=timezone.utc)
     epoch_time = int(dt.timestamp())
-    
+
   except:
     error = True
-  
+    epoch_time = None
+
   return error, epoch_time
 
 def reduce(iterable, initializer=None):
