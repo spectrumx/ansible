@@ -18,6 +18,11 @@
       owner: root
       group: root
 
+  - name: Create gpsd group
+    group:
+      name: "gpsd"
+      state: "present"
+
   - name: Add mepuser to gpsd group
     user:
       name: "mepuser"
