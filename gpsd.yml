@@ -18,45 +18,45 @@
       owner: root
       group: root
 
-  - name: Mask gpsd.service
-    #name: Enable gpsd.service
+  - name: Add mepuser to gpsd group
+    user:
+      name: "mepuser"
+      groups: "gpsd"
+      append: true
+
+  - name: Enable gpsd.service
     systemd:
-      name: gpsd
-      #enabled: true
-      state: stopped
-      masked: true
+      name: gpsd.service
+      masked: false
+      enabled: true
 
-  - name: Clone ttybus
-    git:
-      repo: https://github.com/danielinux/ttybus
-      dest: /opt/ttybus
-      update: no
+  - name: Create systemd config directory for gpsd.socket
+    file:
+      path: /etc/systemd/system/gpsd.socket.d
+      state: directory
+      mode: '0755'
 
-  - name: Build ttybus
-    command:
-      chdir: /opt/ttybus
-      cmd: make
-      creates: /opt/ttybus/tty_bus
-
-  - name: copy afe_serial target and services
+  - name: Make gpsd.socket world-writable
     copy:
-      src: "{{ item }}"
-      dest: "/etc/systemd/system/"
-      mode: 0644
-      owner: root
-      group: root
-    with_fileglob:
-      - "files/afe_serial/*"
+      dest: /etc/systemd/system/gpsd.socket.d/override.conf
+      mode: '0644'
+      content: |
+        [Socket]
+        SocketMode=0666
+    notify:
+      - Reload gpsd.socket
 
-  - name: Disable afe_serial.target
-    #name: Enable afe_serial.target
-    systemd:
-      name: afe_serial.target
-      daemon_reload: true
-      state: stopped
-      enabled: false
-      #state: started
-      #enabled: true
+  - name: Remove ttybus and afe_serial systemd services
+    file:
+      path: '{{ item.path }}'
+      state: absent
+    loop:
+      - /opt/ttybus
+      - /etc/systemd/system/afe_serial_attach.service
+      - /etc/systemd/system/afe_serial_GNSS1_control.service
+      - /etc/systemd/system/afe_serial_GNSS1_gpsd.service
+      - /etc/systemd/system/afe_serial_ttybus.service
+      - /etc/systemd/system/afe_serial.target
 
   - name: Configure chrony
     blockinfile:
@@ -76,3 +76,9 @@
     systemd:
       name: chrony
       state: restarted
+
+  - name: Reload gpsd.socket
+    systemd:
+      daemon_reload: true
+      name: gpsd.socket
+      state: reloaded

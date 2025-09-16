@@ -25,6 +25,10 @@
       mode: 0644
       owner: root
       group: root
+    notify:
+      - Enable afe_control
+
+  handlers:
 
   - name: Enable afe_control
     systemd:

@@ -2,6 +2,8 @@
 Description=Analog Frontend controller service
 BindsTo=dev-ttyGNSS1.device
 After=dev-ttyGNSS1.device
+BindsTo=gpsd.service
+After=gpsd.service
 
 [Service]
 Type=exec

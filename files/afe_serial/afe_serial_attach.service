@@ -1,9 +1,0 @@
-[Unit]
-Description=Attach real AFE serial interface to ttybus
-BindsTo=afe_serial_ttybus.service
-After=afe_serial_ttybus.service
-
-[Service]
-Type=forking
-ExecStart=/opt/ttybus/tty_attach -d -s /tmp/ttyGNSS1mux /dev/ttyGNSS1
-Restart=always
