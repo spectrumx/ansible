@@ -69,8 +69,9 @@
       state: present
       block: |
         manual
-        refclock SHM 0 refid GNSS precision 1e-1 offset 0.25 delay 0.2
-        refclock SHM 1 refid PPS precision 1e-7
+        makestep 1 -1
+        refclock SHM 0 refid GNSS poll 1 precision 1e-1 offset 0.25 delay 0.2 noselect
+        refclock SHM 1 refid PPS lock GNSS poll 3 precision 1e-7
         allow 192.168.0.0/16
     notify:
       - Restart chrony
