@@ -42,7 +42,7 @@
       register: mep_gid
 
     - name: GET NODE_ID of this mep
-      ansible.builtin.command: cat /sys/class/net/en0/address
+      ansible.builtin.command: cat /sys/class/net/en0/address | tr -d ':'
       register: mep_node_id
 
     - name: Replace UID in .env
