@@ -86,5 +86,5 @@
   - name: Reload gpsd.socket
     systemd:
       daemon_reload: true
-      name: gpsd.socket
+      name: gpsd
       state: reloaded
