@@ -34,6 +34,8 @@
       name: gpsd.service
       masked: false
       enabled: true
+    notify:
+      - Restart gpsd.service
 
   - name: Create systemd config directory for gpsd.socket
     file:
@@ -49,7 +51,7 @@
         [Socket]
         SocketMode=0666
     notify:
-      - Reload gpsd.socket
+      - Restart gpsd.socket
 
   - name: Remove ttybus and afe_serial systemd services
     file:
@@ -83,8 +85,13 @@
       name: chrony
       state: restarted
 
-  - name: Reload gpsd.socket
+  - name: Restart gpsd.service
+    systemd:
+      name: gpsd.service
+      state: restarted
+
+  - name: Restart gpsd.socket
     systemd:
       daemon_reload: true
       name: gpsd.socket
-      state: reloaded
+      state: restarted
