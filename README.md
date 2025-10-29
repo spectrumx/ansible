@@ -1,5 +1,5 @@
 # Ansible Configuration Scripts
-This is meant to be ran on a fresh image and will setup all necessary packages and configurations to tie it into the SpectrumX platform.  
+This is meant to be ran on a fresh image and will setup all necessary packages and configurations to tie it into the SpectrumX platform.
 
 ## Usage
 
@@ -74,8 +74,8 @@ Add these lines near the bottom, after the APP partition:
 ```
 Prepare the disk image:
 ```
-dd if=/dev/zero of=data.img bs=1M count=10 
-mkfs.ext4 data.img  
+dd if=/dev/zero of=data.img bs=1M count=10
+mkfs.ext4 data.img
 ``` -->
 
 ### Add files to rootfs before building the image
@@ -94,7 +94,7 @@ chmod 755 root/setup_ansible.py
 ln -s etc/systemd/system/setup_ansible.service etc/systemd/system/multi-user.target.wants/setup_ansible.service
 
 cd ..
-sudo ./tools/l4t_create_default_user.sh --accept-license -u mep -p <REDACTED> 
+sudo ./tools/l4t_create_default_user.sh --accept-license -u mep -p <REDACTED>
 
 
 cd ..
@@ -104,7 +104,19 @@ cd ..
 Run this command to build image and flash the Jetson
 
 ```
-ADDITIONAL_DTB_OVERLAY_OPT="BootOrderNvme.dtbo" ./tools/kernel_flash/l4t_initrd_flash.sh --external-device sda1 -c tools/kernel_flash/flash_l4t_external.xml -p "-c bootloader/generic/cfg/flash_t234_qspi.xml" --showlogs --network usb0 jetson-orin-nano-devkit sda1
+ADDITIONAL_DTB_OVERLAY_OPT="BootOrderNvme.dtbo" sudo -E ./tools/kernel_flash/l4t_initrd_flash.sh --external-device sda1 -c tools/kernel_flash/flash_l4t_external.xml -p "-c bootloader/generic/cfg/flash_t234_qspi.xml" --showlogs --network usb0 jetson-orin-nano-devkit sda1
+```
+
+If you have previously run the prior command and just want to flash without rebuilding images, add the `--flash-only` flag:
+
+```
+ADDITIONAL_DTB_OVERLAY_OPT="BootOrderNvme.dtbo" sudo -E ./tools/kernel_flash/l4t_initrd_flash.sh --flash-only --external-device sda1 -c tools/kernel_flash/flash_l4t_external.xml -p "-c bootloader/generic/cfg/flash_t234_qspi.xml" --showlogs --network usb0 jetson-orin-nano-devkit sda1
+```
+
+To re-flash only the Jetson and not touch the external drive, you can use this command:
+
+```
+sudo ./flash.sh -r --no-systemimg -c bootloader/generic/cfg/flash_t234_qspi.xml jetson-orin-nano-devkit sda1
 ```
 
 
