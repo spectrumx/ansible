@@ -90,6 +90,14 @@
         group: mep
         mode: 0777
 
+    - name: Create /data/captures for capture sessions
+      file:
+        path: /data/captures
+        state: directory
+        owner: mep
+        group: mep
+        mode: 0777
+
     - name: Add user to sudoers
       lineinfile:
         path: /etc/sudoers
