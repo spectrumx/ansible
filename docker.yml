@@ -11,6 +11,13 @@
         key_file: /opt/radiohound/.ssh/id_rsa
         accept_hostkey: yes
 
+    - name: Check permissions on /opt/radiohound/docker
+      file:
+        path: /opt/radiohound/docker
+        owner: root
+        group: root
+        recurse: yes
+
     - name: Check if safe.directory exists
       shell: grep -q 'safe' /opt/radiohound/docker/.git/config
       register: docker_safe_directory_check
@@ -23,6 +30,14 @@
     - name: Add git safe.directory to docker repo
       shell: GIT_DIR=/opt/radiohound/docker/.git GIT_WORK_TREE=/opt/radiohound/docker git config --add safe.directory /opt/radiohound/docker
       when: docker_safe_directory_check.rc != 0
+
+    - name: Remove old container mqtt_ssh_tunnel
+      shell: docker stop mqtt_ssh_tunnel && docker remove mqtt_ssh_tunnel
+      ignore_errors: yes
+
+    - name: Remove old container fft
+      shell: docker stop fft && docker remove fft
+      ignore_errors: yes
 
     - name: Copy .env for docker
       copy:
