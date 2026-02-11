@@ -2,3 +2,4 @@ SUBSYSTEM=="tty", ATTRS{product}=="FT231X USB UART", SYMLINK+="ttyGNSS1 ttyAFE",
 SUBSYSTEM=="tty", ATTRS{product}=="u-blox GNSS receiver", SYMLINK+="ttyUBLOX"
 SUBSYSTEM=="tty", ATTRS{product}=="Feather RP2040", SYMLINK+="ttyRPi_CPy"
 SUBSYSTEM=="tty", ATTRS{idProduct}=="6001", ATTRS{idVendor}=="0403", SYMLINK+="valon5015"
+SUBSYSTEM=="tty", ATTRS{idProduct}=="6014", ATTRS{idVendor}=="0403", SYMLINK+="lmx2820"
