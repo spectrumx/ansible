@@ -3,7 +3,8 @@
 # afe_service.py
 #
 # MIT Haystack Observatory
-# Ben Welchman 08-01-2025
+# Updated: John Marino 2026 02 24
+# Original: Ben Welchman 08-01-2025
 #
 # --------------------------
 #
@@ -138,12 +139,13 @@ class Telemetry:
 
       self.gps = []
       self.telem = []
-      self.registers = []
+      self.registers = [None] * 7
       self.RTCtime = None
 
     def request_telem(self):
 
       self.telem.clear()
+      self.gps.clear()
 
       msg_draft = "$TELEM?*"
       msg = add_cksum(msg_draft)
@@ -151,11 +153,12 @@ class Telemetry:
 
     def request_registers(self):
 
-      self.registers.clear()
+      self.registers = [None] * 7
 
-      msg_draft = "$MAX?*"
-      msg = add_cksum(msg_draft)
-      send_nmea_command(msg)
+      for msg_draft in ["$PMITMA?*", "$PMITXT1?*", "$PMITXT2?*",
+                         "$PMITXR1?*", "$PMITXR2?*", "$PMITXR3?*", "$PMITXR4?*"]:
+        msg = add_cksum(msg_draft)
+        send_nmea_command(msg)
 
     def print(self):
 
@@ -163,17 +166,17 @@ class Telemetry:
       global telem_in_progress
       global regs_in_progress
 
-      self.request_telem()
-      self.request_registers()
-
       telem_in_progress = True
       regs_in_progress = True
+      
+      self.request_telem()
+      self.request_registers()
 
       all_items = []
 
       start = time.monotonic()
       wait = 0
-      while gps_in_progress is True and wait < 1.2:
+      while gps_in_progress is True and wait < 5.0:
         wait = time.monotonic() - start
         time.sleep(0.001)
 
@@ -182,7 +185,7 @@ class Telemetry:
 
       start = time.monotonic()
       wait = 0
-      while telem_in_progress is True and wait < 1.2:
+      while telem_in_progress is True and wait < 5.0:
         wait = time.monotonic() - start
         time.sleep(0.001)
 
@@ -191,7 +194,7 @@ class Telemetry:
 
       start = time.monotonic()
       wait = 0
-      while regs_in_progress is True and wait < 1.2:
+      while regs_in_progress is True and wait < 5.0:
             wait = time.monotonic() - start
             time.sleep(0.001)
 
@@ -208,7 +211,10 @@ class Telemetry:
           idx = str(row - 2)
           tag = "RX" + idx + "REG: "
 
-        all_items.append(tag + str(self.registers[row]))
+        if self.registers[row] is not None:
+          all_items.append(tag + str(self.registers[row]))
+        else:
+          all_items.append(tag + "n/a (timeout)")
 
       return all_items
 
@@ -220,11 +226,10 @@ class Telemetry:
         global telem_in_progress
         global regs_in_progress
 
-        self.request_telem()
-        self.request_registers()
-
         telem_in_progress = True
         regs_in_progress = True
+        self.request_telem()
+        self.request_registers()
 
         start = time.monotonic()
         wait = 0
@@ -402,14 +407,22 @@ def gpsd_monitor():
       if line.startswith('$PMITG'):
         telem_in_progress = False
 
-    elif line.startswith('$PMAX'):
-      split = line.split(',')
-      for row in range(1,8):
-        reg_row = []
-        for col in range(10):
-          reg_row.append(int(split[row][col]))
-        global_telemetry.registers.append(reg_row)
-      regs_in_progress = False
+    elif line.startswith('$PMITSR'):
+      try:
+        parts = line.split('*')[0].split(',')
+        # format: $PMITSR,<status>,<code>,<bit0>,...,<bit9>
+        if parts[1] == '0' and len(parts) >= 13:
+          tlc = parts[2]
+          bits = [int(b) for b in parts[3:13]]
+          reg_map = {'MA?': 0, 'XT1': 1, 'XT2': 2,
+                     'XR1': 3, 'XR2': 4, 'XR3': 5, 'XR4': 6}
+          if tlc in reg_map:
+            global_telemetry.registers[reg_map[tlc]] = bits
+      except Exception as e:
+        print(f"$PMITSR parse error: {e} | line: {line!r}")
+      finally:
+        if all(r is not None for r in global_telemetry.registers):
+          regs_in_progress = False
 
     else:
       continue
