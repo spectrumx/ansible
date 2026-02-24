@@ -208,7 +208,7 @@ class Telemetry:
           idx = str(row - 2)
           tag = "RX" + idx + "REG: "
 
-        all_items.append(tag + str(self.registers[i]))
+        all_items.append(tag + str(self.registers[row]))
 
       return all_items
 
