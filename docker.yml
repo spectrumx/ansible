@@ -10,6 +10,7 @@
         force: yes
         key_file: /opt/radiohound/.ssh/id_rsa
         accept_hostkey: yes
+      ignore_errors: true
 
     - name: Check permissions on /opt/radiohound/docker
       file:
