@@ -303,12 +303,14 @@ class Telemetry:
               idx = str(row - 2)
               line = ["RX" + idx + "REG"]
 
+            '''
             for column in range(10):
               try:
                 state = self.registers[row][column]
               except IndexError:
                 state = "n/a"
               line.append(state)
+            '''
 
             writer.writerow(line)
             line = []
