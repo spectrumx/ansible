@@ -11,7 +11,7 @@ compose_base_dir = "/opt/radiohound/docker"  # Base directory where all docker-c
 compose_file_name = "compose.yaml"
 announce_data = {}
 status_data = {}
-send_status_timer = None             # Add a global timer reference
+send_status_delayed = None             # Add a global timer reference
 
 announce_packet = {
     "title": "Docker Compose Control Script",
@@ -30,34 +30,54 @@ if not os.path.exists(os.path.join(compose_base_dir, compose_file_name)):
     exit(1)
 
 def run_compose_command(payload):
-    global send_status_timer
+    global send_status_delayed
+    # Accept only string payloads, split into command and arguments
+    if not isinstance(payload, str):
+        print(f"Invalid payload type: {type(payload)}")
+        return
     command = payload.split()
     try:
         output = ''
         error = ''
 
         # Stop the send_status_timer right away
-        if send_status_timer is not None:
-            send_status_timer.cancel()
+        if send_status_delayed is not None:
+            send_status_delayed.cancel()
 
         if command[0] == "start":
             print("Starting docker containers...")
-            result = subprocess.run( ["docker","compose","up","-d"], cwd=compose_base_dir, capture_output=True, text=True)
+            result = subprocess.run(["docker", "compose", "up", "-d"], cwd=compose_base_dir, capture_output=True, text=True)
             output = result.stdout
             error = result.stderr
         elif command[0] == "stop":
             print("Stopping docker containers...")
-            result = subprocess.run( ["docker","compose","down"], cwd=compose_base_dir, capture_output=True, text=True)
+            result = subprocess.run(["docker", "compose", "down"], cwd=compose_base_dir, capture_output=True, text=True)
             output = result.stdout
             error = result.stderr
-        elif command[0] == "update":
+        elif command[0] == "pull":
             print("Updating docker containers...")
-            result0 = subprocess.run( ["docker","compose","down"], cwd=compose_base_dir, capture_output=True, text=True)
-            result1 = subprocess.run( ["docker","compose","pull"], cwd=compose_base_dir, capture_output=True, text=True)
-            result2 = subprocess.run( ["docker","compose","up","-d","--force-recreate"], cwd=compose_base_dir, capture_output=True, text=True)
-            output = result0.stdout + result1.stdout + result2.stdout
-            error = result0.stderr + result1.stderr + result2.stderr
+            result = subprocess.run(["docker", "compose", "pull"], cwd=compose_base_dir, capture_output=True, text=True)
+            output = result.stdout
+            error = result.stderr
+        elif command[0] == "upgrade":
+            print("Updating docker containers...")
+            result0 = subprocess.run(["docker", "compose", "pull"], cwd=compose_base_dir, capture_output=True, text=True)
+            result1 = subprocess.run(["docker", "compose", "up", "-d"], cwd=compose_base_dir, capture_output=True, text=True)
+            output = result0.stdout + result1.stdout
+            error = result0.stderr + result1.stderr
+        elif command[0] == "force":
+            print("Updating docker containers...")
+            result0 = subprocess.run(["docker", "compose", "pull"], cwd=compose_base_dir, capture_output=True, text=True)
+            result1 = subprocess.run(["docker", "compose", "up", "-d", "--force-recreate"], cwd=compose_base_dir, capture_output=True, text=True)
+            output = result0.stdout + result1.stdout
+            error = result0.stderr + result1.stderr
+        elif command[0] == "status":
+            pass  # Status is sent after every command
+        else:
+            error = f"Unknown command: {command[0]}"
 
+        if command[0] in ["pull", "upgrade", "force"]:
+            time.sleep(5)
             # Ensure 'mqtt' container is running
             check_mqtt = subprocess.run(
                 ["docker", "ps", "--filter", "name=mqtt", "--filter", "status=running", "--format", "{{.Names}}"],
@@ -71,54 +91,78 @@ def run_compose_command(payload):
                 )
                 output += restart_result.stdout
                 error += restart_result.stderr
-        elif command[0] == "status":
-            pass #Status is sent after every command
-        else:
-            error = f"Unknown command: {command[0]}"
 
         print(output)
         if not error == '':
             print(error)
 
         # Send status after a delay, to account for  any changes or multiple calls
-        send_status_timer = threading.Timer(2.0, send_status)
-        send_status_timer.daemon = True
-        send_status_timer.start()
+        send_status_delayed = threading.Timer(2.0, send_status)
+        send_status_delayed.daemon = True
+        send_status_delayed.start()
 
     except Exception as e:
         print(f"Error running docker compose command: {e}")
 
 def on_connect(client, userdata, flags, rc):
     print(f"{service_name} connected to mqtt: {rc}")
-    client.subscribe(service_name + "/command")
 
     send_status_timer = threading.Timer(2.0, send_status)  # 2 second delay
     send_status_timer.daemon = True
     send_status_timer.start()
 
 def on_message(client, userdata, msg):
-    global send_status_timer
+    global send_status_delayed
     try:
         payload = msg.payload.decode()
+
+        # Only parse announce/status as JSON, otherwise treat as string command
         if 'announce' in msg.topic:
             # topic: announce/<container_name>
-            announce_data[msg.topic.split('/')[1]] = json.loads(payload)
+            try:
+                parsed_payload = json.loads(payload)
+            except Exception:
+                parsed_payload = payload
+            announce_data[msg.topic.split('/')[1]] = parsed_payload
             return
         elif 'status' in msg.topic:
             # topic: <container_name>/status
-            status_data[msg.topic.split('/')[0]] = json.loads(payload)
+            try:
+                parsed_payload = json.loads(payload)
+            except Exception:
+                parsed_payload = payload
+            status_data[msg.topic.split('/')[0]] = parsed_payload
             return
         else:
-            thread = threading.Thread(target=run_compose_command, args=(payload,))
-            thread.daemon = True
-            thread.start()
+            # Special handling for setup_ssh_tunnel
+            if payload.startswith("setup_ssh_tunnel"):
+                parts = payload.split()
+                if len(parts) > 1:
+                    port = parts[1]
+                    cmd = ('/usr/bin/autossh -f -NR ' + str(port) + ':localhost:22 '
+                           ' -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3"'
+                           ' -o GlobalKnownHostsFile=/dev/null '
+                           ' -o StrictHostKeyChecking=no '
+                           ' -i /opt/icarus/.ssh/id_rsa git@radiohound.ee.nd.edu')
+                    print(f"Setting up SSH tunnel on port {port}...")
+                    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+                    if result.stdout:
+                        print(result.stdout)
+                    if result.stderr:
+                        print(result.stderr)
+                else:
+                    print("Missing port argument for setup_ssh_tunnel command.")
+            else:
+                thread = threading.Thread(target=run_compose_command, args=(payload,))
+                thread.daemon = True
+                thread.start()
 
         # Debounce send_status: cancel previous timer and start a new one
-        if send_status_timer is not None:
-            send_status_timer.cancel()
-        send_status_timer = threading.Timer(2.0, send_status)  # 2 second delay
-        send_status_timer.daemon = True
-        send_status_timer.start()
+        if send_status_delayed is not None:
+            send_status_delayed.cancel()
+        send_status_delayed = threading.Timer(2.0, send_status)  # 2 second delay
+        send_status_delayed.daemon = True
+        send_status_delayed.start()
     except Exception as err:
         print(f"Failed to parse incoming message: {msg.payload.decode()}\n{err}\n{traceback.format_exc()}")
 
@@ -142,6 +186,9 @@ def send_status():
                 # Extract build_version label if it exists
                 labels = inspect_data.get("Config", {}).get("Labels", {})
                 build_version = labels.get("build_version", "unknown")
+
+                if build_version == "unknown":
+                    build_version = labels.get("org.opencontainers.image.created", "unknown")
 
                 container_record = {
                     "name": name,
@@ -179,12 +226,22 @@ def send_status():
     except Exception as e:
         print(f"Error fetching status: {e}")
 
+def send_status_scheduler():
+    while True:
+        send_status()
+        time.sleep(60)
+        
+
+update_thread = threading.Thread(target=send_status_scheduler, daemon=True)
+update_thread.start()
+
 # MQTT setup
 mqtt_client = mqtt.Client(client_id="docker-control")
 mqtt_client.on_message = on_message
 mqtt_client.on_connect = on_connect
 mqtt_client.will_set(service_name + "/status", payload=json.dumps({"state": "offline"}), qos=0, retain=True)
 mqtt_client.connect('localhost', 1883, 60)
+mqtt_client.subscribe(service_name + "/command")
 mqtt_client.subscribe('announce/#')
 mqtt_client.subscribe('+/status')
 mqtt_client.loop_forever()
