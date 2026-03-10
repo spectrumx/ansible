@@ -3,7 +3,7 @@
 DEVICES="/dev/ttyGNSS1"
 
 # Other options you want to pass to gpsd
-GPSD_OPTIONS="--nowait --badtime --speed 460800 --sockfile /run/gpsd.sock --debug 3"
+GPSD_OPTIONS="--nowait --badtime --speed 460800 --sockfile /run/gpsd.sock --debug 0"
 
 # Automatically hot add/remove USB GPS devices via gpsdctl
 USBAUTO="false"
