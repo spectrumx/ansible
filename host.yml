@@ -184,6 +184,13 @@
     # register: need_reboot
     # changed_when: need_reboot.changed and current_status.stat.exists and "'pmode:0003\n' not in current_status.content"
 
+  - name: Configure logrotate to limit syslog size
+    lineinfile:
+      path: /etc/logrotate.d/rsyslog
+      state: present
+      regexp: '^\smaxsize.*'
+      line: "\tmaxsize 50M"
+      insertbefore: "\tmissingok"
 
 
   handlers:
