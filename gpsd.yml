@@ -17,6 +17,8 @@
       mode: 0644
       owner: root
       group: root
+    notify:
+      - Restart gpsd.socket
 
   - name: Create gpsd group
     group:
