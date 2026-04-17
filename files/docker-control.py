@@ -118,12 +118,15 @@ def on_message(client, userdata, msg):
 
         # Only parse announce/status as JSON, otherwise treat as string command
         if 'announce' in msg.topic:
+            topic = msg.topic.split('/')[1]
+            if topic == "announce":
+                topic = msg.topic.split('/')[0]
             # topic: announce/<container_name>
             try:
                 parsed_payload = json.loads(payload)
             except Exception:
                 parsed_payload = payload
-            announce_data[msg.topic.split('/')[1]] = parsed_payload
+            announce_data[topic] = parsed_payload
             return
         elif 'status' in msg.topic:
             # topic: <container_name>/status
@@ -243,5 +246,6 @@ mqtt_client.will_set(service_name + "/status", payload=json.dumps({"state": "off
 mqtt_client.connect('localhost', 1883, 60)
 mqtt_client.subscribe(service_name + "/command")
 mqtt_client.subscribe('announce/#')
+mqtt_client.subscribe('+/announce')
 mqtt_client.subscribe('+/status')
 mqtt_client.loop_forever()
