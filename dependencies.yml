@@ -109,6 +109,10 @@
         - digital_rf
         - spectrumx
         - docker
+        - aiomqtt
+        - anyio
+        - jsonargparse
+        - msgspec
         # tuner control
         - adafruit-blinka
         - pyserial

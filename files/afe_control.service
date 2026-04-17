@@ -7,7 +7,7 @@ After=gpsd.service
 
 [Service]
 Type=exec
-ExecStart=/usr/bin/python3 /opt/afe/afe_service.py
+ExecStart=/opt/radiohound/python313/bin/python /opt/afe/afe_service.py
 User=mep
 Group=mep
 Restart=always
