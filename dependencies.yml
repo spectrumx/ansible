@@ -109,6 +109,7 @@
         - digital_rf
         - spectrumx
         - docker
+        - exceptiongroup
         - aiomqtt
         - anyio
         - jsonargparse
