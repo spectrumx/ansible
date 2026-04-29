@@ -32,6 +32,7 @@
 
 import csv
 import dataclasses
+import json
 import logging
 import os
 import socket
@@ -305,6 +306,7 @@ _CSV_HEADER = (
     + [f"mag_{k}"  for k in _buf_mag]
     + [f"imu_{k}"  for k in _buf_imu]
     + [f"hk_{k}"   for k in _buf_hk]
+    + ["registers_json"]
 )
 
 _reg = {
@@ -1351,6 +1353,7 @@ async def _emit_csv(service):
                 row = [now.isoformat()]
                 for buf in (_buf_gps, _buf_mag, _buf_imu, _buf_hk):
                     row.extend(buf.values())
+                row.append(json.dumps(_reg["registers"], sort_keys=True, separators=(",", ":")))
                 w.writerow(row)
             logger.info(f"Telemetry logged: {path}")
         except Exception:
