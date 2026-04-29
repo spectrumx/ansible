@@ -297,6 +297,16 @@ _buf_imu = _make_buf(_DATA_FIELDS_IMU)
 _buf_mag = _make_buf(_DATA_FIELDS_MAG)
 _buf_hk  = _make_buf(_DATA_FIELDS_HK, extras={"time_source": None, "time_epoch": None})
 
+# Flat wide CSV header — one column per buffer field, prefixed by stream name.
+# Computed once at import time from the live buffer key order.
+_CSV_HEADER = (
+    ["snapshot_utc"]
+    + [f"gnss_{k}" for k in _buf_gps]
+    + [f"mag_{k}"  for k in _buf_mag]
+    + [f"imu_{k}"  for k in _buf_imu]
+    + [f"hk_{k}"   for k in _buf_hk]
+)
+
 _reg = {
     "registers":       {info["tlc"]: [None]*10 for info in _DEVICES.values()},
     "registers_named": {dev: _decode_dev_regs(dev, [None]*10) for dev in _DEVICES},
@@ -1333,16 +1343,15 @@ async def _emit_csv(service):
             now = datetime.now(timezone.utc)
             os.makedirs(service.str_log_dir, exist_ok=True)
             path = os.path.join(service.str_log_dir, f"telemetry_{now.strftime('%Y%m%d')}.csv")
+            write_header = not os.path.exists(path) or os.path.getsize(path) == 0
             with open(path, "a", newline="", encoding="utf-8") as f:
                 w = csv.writer(f)
-                w.writerow(["# snapshot_utc", now.isoformat()])
-                for label, buf in [("gnss", _buf_gps), ("mag", _buf_mag),
-                                   ("imu", _buf_imu), ("housekeeping", _buf_hk)]:
-                    if buf:
-                        w.writerow([f"# {label}"])
-                        w.writerow(list(buf.keys()))
-                        w.writerow(list(buf.values()))
-                w.writerow([])
+                if write_header:
+                    w.writerow(_CSV_HEADER)
+                row = [now.isoformat()]
+                for buf in (_buf_gps, _buf_mag, _buf_imu, _buf_hk):
+                    row.extend(buf.values())
+                w.writerow(row)
             logger.info(f"Telemetry logged: {path}")
         except Exception:
             logger.exception("CSV write error")
