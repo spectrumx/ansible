@@ -76,6 +76,7 @@ _GPSD_WATCH_CMD = b'?WATCH={"enable":true,"raw":1};\r\n'
 # Polling is owned by afe/command/polling with one global interval.
 _USE_SERVICE_TELEM_WORKAROUND = True
 _POLL_LOOP_SLEEP_S = 0.2
+_REGISTER_QUERY_GAP_S = 0.1
 
 # ============================================================================
 # SOURCE-OF-TRUTH TABLES
@@ -882,12 +883,21 @@ async def _monitor_gpsd(client, service):
 
                 if not _startup_queries_sent:
                     ok = True
-                    for q in ["$PMITIM?*", "$PMITMG?*", "$PMITR?*", "$PMITTP?*",
-                              *[i["query"] for i in _DEVICES.values()]]:
+                    startup_queries = [
+                        "$PMITIM?*",
+                        "$PMITMG?*",
+                        "$PMITR?*",
+                        "$PMITTP?*",
+                        *[i["query"] for i in _DEVICES.values()],
+                    ]
+                    for idx, q in enumerate(startup_queries):
                         try:
                             cmd = _nmea_cksum(q)
                             await _gpsd_send_async(cmd, service.str_device)
                             logger.info(f"Startup query sent: {cmd}")
+                            # Avoid bursting startup queries too quickly.
+                            if idx < len(startup_queries) - 1:
+                                await anyio.sleep(_REGISTER_QUERY_GAP_S)
                         except Exception as exc:
                             ok = False
                             logger.warning(f"Startup query failed for {q}: {exc}")
@@ -1075,10 +1085,18 @@ async def _dispatch_nmea_cmd(client, service, handler, task_name, args, payload,
                          {"state": "pending", "message": f"{task_name!r} sent to firmware"},
                          payload, subtopic)
     failed = []
+    pace_register_queries = (
+        subtopic == "registers"
+        and task_name == "get_registers"
+        and str(args.get("device", "all")).lower().strip() in ("", "all")
+        and len(nmea_list) > 1
+    )
     for cmd in nmea_list:
         logger.info(f"  NMEA → {cmd!r}")
         try:
             await _gpsd_send_async(cmd, service.str_device)
+            if pace_register_queries:
+                await anyio.sleep(_REGISTER_QUERY_GAP_S)
         except Exception as exc:
             logger.error(f"gpsd_send failed for {cmd!r}: {exc}")
             failed.append({"command": cmd, "error": str(exc)})
