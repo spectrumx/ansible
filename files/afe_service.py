@@ -91,42 +91,42 @@ _REGISTER_QUERY_GAP_S = 0.1
 # ---- Pin tables ----
 
 _MISC_PINS = [
-    {"pin": 0, "name": "TRIG_TX_SRC_SEL",   "label": "TX Trigger Source Select",   "default": 1, "0": "Internal",     "1": "External"},
-    {"pin": 1, "name": "TRIG_RX_SRC_SEL",   "label": "RX Trigger Source Select",   "default": 1, "0": "Internal",     "1": "External"},
-    {"pin": 2, "name": "EXT_TX_TRIG_ENABLE", "label": "External TX Trigger Enable", "default": 1, "0": "Enabled",      "1": "Disabled"},
-    {"pin": 3, "name": "EXT_RX_TRIG_ENABLE", "label": "External RX Trigger Enable", "default": 1, "0": "Enabled",      "1": "Disabled"},
-    {"pin": 4, "name": "NOT_USED_4",         "label": "Not Used (4)",               "default": 0, "0": "Reserved",     "1": "Reserved"},
-    {"pin": 5, "name": "EXT_BIAS_ENABLE",    "label": "External Bias Enable",       "default": 0, "0": "Disabled",     "1": "Enabled"},
-    {"pin": 6, "name": "TEST_LED",           "label": "Test LED",                   "default": 0, "0": "Off",          "1": "On"},
-    {"pin": 7, "name": "PPS_SOURCE_SEL",     "label": "PPS Source Select",          "default": 1, "0": "External",     "1": "Internal GNSS"},
-    {"pin": 8, "name": "REF_SOURCE_SEL",     "label": "Reference Source Select",    "default": 1, "0": "External",     "1": "Internal OCXO"},
-    {"pin": 9, "name": "GNSS_ANT_SEL",       "label": "GNSS Antenna Select",        "default": 0, "0": "External",     "1": "Internal"},
+    {"pin": 0, "name": "TRIG_TX_SRC_SEL",   "label": "TX Trigger Source Select",   "rp2040_default": 1, "service_default_override": 1, "0": "Internal",     "1": "External"},
+    {"pin": 1, "name": "TRIG_RX_SRC_SEL",   "label": "RX Trigger Source Select",   "rp2040_default": 1, "service_default_override": 1, "0": "Internal",     "1": "External"},
+    {"pin": 2, "name": "EXT_TX_TRIG_ENABLE", "label": "External TX Trigger Enable", "rp2040_default": 1, "service_default_override": 1, "0": "Enabled",      "1": "Disabled"},
+    {"pin": 3, "name": "EXT_RX_TRIG_ENABLE", "label": "External RX Trigger Enable", "rp2040_default": 1, "service_default_override": 1, "0": "Enabled",      "1": "Disabled"},
+    {"pin": 4, "name": "NOT_USED_4",         "label": "Not Used (4)",               "rp2040_default": 0, "service_default_override": 0, "0": "Reserved",     "1": "Reserved"},
+    {"pin": 5, "name": "EXT_BIAS_ENABLE",    "label": "External Bias Enable",       "rp2040_default": 0, "service_default_override": 0, "0": "Disabled",     "1": "Enabled"},
+    {"pin": 6, "name": "TEST_LED",           "label": "Test LED",                   "rp2040_default": 0, "service_default_override": 0, "0": "Off",          "1": "On"},
+    {"pin": 7, "name": "PPS_SOURCE_SEL",     "label": "PPS Source Select",          "rp2040_default": 1, "service_default_override": 1, "0": "External",     "1": "Internal GNSS"},
+    {"pin": 8, "name": "REF_SOURCE_SEL",     "label": "Reference Source Select",    "rp2040_default": 1, "service_default_override": 1, "0": "External",     "1": "Internal OCXO"},
+    {"pin": 9, "name": "GNSS_ANT_SEL",       "label": "GNSS Antenna Select",        "rp2040_default": 0, "service_default_override": 0, "0": "External",     "1": "Internal"},
 ]
 
 _TX_PINS = [
-    {"pin": 0, "name": "NOT_USED_0",        "label": "Not Used (0)",           "default": 0, "0": "Reserved",   "1": "Reserved"},
-    {"pin": 1, "name": "TX_BLANK_SEL",      "label": "TX Blanking Select",    "default": 1, "0": "Blanked",    "1": "Not blanked"},
-    {"pin": 2, "name": "FILTER_BYPASS_SEL", "label": "Filter Bypass Select",  "default": 1, "0": "Filtered",   "1": "Bypassed"},
-    {"pin": 3, "name": "NOT_USED_3",        "label": "Not Used (3)",           "default": 0, "0": "Reserved",   "1": "Reserved"},
-    {"pin": 4, "name": "NOT_USED_4",        "label": "Not Used (4)",           "default": 0, "0": "Reserved",   "1": "Reserved"},
-    {"pin": 5, "name": "NOT_USED_5",        "label": "Not Used (5)",           "default": 0, "0": "Reserved",   "1": "Reserved"},
-    {"pin": 6, "name": "NOT_USED_6",        "label": "Not Used (6)",           "default": 0, "0": "Reserved",   "1": "Reserved"},
-    {"pin": 7, "name": "NOT_USED_7",        "label": "Not Used (7)",           "default": 0, "0": "Reserved",   "1": "Reserved"},
-    {"pin": 8, "name": "NOT_USED_8",        "label": "Not Used (8)",           "default": 0, "0": "Reserved",   "1": "Reserved"},
-    {"pin": 9, "name": "TEST_LED",          "label": "Test LED",              "default": 0, "0": "Off",        "1": "On"},
+    {"pin": 0, "name": "NOT_USED_0",        "label": "Not Used (0)",           "rp2040_default": 0, "service_default_override": 0, "0": "Reserved",   "1": "Reserved"},
+    {"pin": 1, "name": "TX_BLANK_SEL",      "label": "TX Blanking Select",    "rp2040_default": 1, "service_default_override": 1, "0": "Blanked",    "1": "Not blanked"},
+    {"pin": 2, "name": "FILTER_BYPASS_SEL", "label": "Filter Bypass Select",  "rp2040_default": 1, "service_default_override": 1, "0": "Filtered",   "1": "Bypassed"},
+    {"pin": 3, "name": "NOT_USED_3",        "label": "Not Used (3)",           "rp2040_default": 0, "service_default_override": 0, "0": "Reserved",   "1": "Reserved"},
+    {"pin": 4, "name": "NOT_USED_4",        "label": "Not Used (4)",           "rp2040_default": 0, "service_default_override": 0, "0": "Reserved",   "1": "Reserved"},
+    {"pin": 5, "name": "NOT_USED_5",        "label": "Not Used (5)",           "rp2040_default": 0, "service_default_override": 0, "0": "Reserved",   "1": "Reserved"},
+    {"pin": 6, "name": "NOT_USED_6",        "label": "Not Used (6)",           "rp2040_default": 0, "service_default_override": 0, "0": "Reserved",   "1": "Reserved"},
+    {"pin": 7, "name": "NOT_USED_7",        "label": "Not Used (7)",           "rp2040_default": 0, "service_default_override": 0, "0": "Reserved",   "1": "Reserved"},
+    {"pin": 8, "name": "NOT_USED_8",        "label": "Not Used (8)",           "rp2040_default": 0, "service_default_override": 0, "0": "Reserved",   "1": "Reserved"},
+    {"pin": 9, "name": "TEST_LED",          "label": "Test LED",               "rp2040_default": 0, "service_default_override": 0, "0": "Off",        "1": "On"},
 ]
 
 _RX_PINS = [
-    {"pin": 0, "name": "CHAN_BIAS_EN",       "label": "Channel Bias Enable",       "default": 0, "0": "Disabled",     "1": "Enabled"},
-    {"pin": 1, "name": "INT_RF_TRIG_SEL",   "label": "Internal RF Trigger Select", "default": 1, "0": "Not asserted", "1": "Asserted"},
-    {"pin": 2, "name": "FILTER_BYPASS_SEL", "label": "Filter Bypass Select",       "default": 1, "0": "Bypassed",     "1": "Filtered"},
-    {"pin": 3, "name": "AMP_BYPASS_SEL",    "label": "Amplifier Bypass Select",    "default": 1, "0": "Bypassed",     "1": "Enabled"},
-    {"pin": 4, "name": "ATTEN_C1",          "label": "Attenuator +1 dB",           "default": 0, "0": "Skip +1dB",    "1": "Add +1dB"},
-    {"pin": 5, "name": "ATTEN_C2",          "label": "Attenuator +2 dB",           "default": 0, "0": "Skip +2dB",    "1": "Add +2dB"},
-    {"pin": 6, "name": "ATTEN_C4",          "label": "Attenuator +4 dB",           "default": 0, "0": "Skip +4dB",    "1": "Add +4dB"},
-    {"pin": 7, "name": "ATTEN_C8",          "label": "Attenuator +8 dB",           "default": 0, "0": "Skip +8dB",    "1": "Add +8dB"},
-    {"pin": 8, "name": "ATTEN_C16",         "label": "Attenuator +16 dB",          "default": 0, "0": "Skip +16dB",   "1": "Add +16dB"},
-    {"pin": 9, "name": "TEST_LED",          "label": "Test LED",                   "default": 0, "0": "Off",          "1": "On"},
+    {"pin": 0, "name": "CHAN_BIAS_EN",       "label": "Channel Bias Enable",       "rp2040_default": 0, "service_default_override": 0, "0": "Disabled",     "1": "Enabled"},
+    {"pin": 1, "name": "INT_RF_TRIG_SEL",    "label": "Internal RF Trigger Select", "rp2040_default": 1, "service_default_override": 1, "0": "Not asserted", "1": "Asserted"},
+    {"pin": 2, "name": "FILTER_BYPASS_SEL",  "label": "Filter Bypass Select",       "rp2040_default": 1, "service_default_override": 1, "0": "Bypassed",     "1": "Filtered"},
+    {"pin": 3, "name": "AMP_BYPASS_SEL",     "label": "Amplifier Bypass Select",    "rp2040_default": 1, "service_default_override": 1, "0": "Bypassed",     "1": "Enabled"},
+    {"pin": 4, "name": "ATTEN_C1",           "label": "Attenuator +1 dB",           "rp2040_default": 0, "service_default_override": 0, "0": "Skip +1dB",    "1": "Add +1dB"},
+    {"pin": 5, "name": "ATTEN_C2",           "label": "Attenuator +2 dB",           "rp2040_default": 0, "service_default_override": 0, "0": "Skip +2dB",    "1": "Add +2dB"},
+    {"pin": 6, "name": "ATTEN_C4",           "label": "Attenuator +4 dB",           "rp2040_default": 0, "service_default_override": 0, "0": "Skip +4dB",    "1": "Add +4dB"},
+    {"pin": 7, "name": "ATTEN_C8",           "label": "Attenuator +8 dB",           "rp2040_default": 0, "service_default_override": 0, "0": "Skip +8dB",    "1": "Add +8dB"},
+    {"pin": 8, "name": "ATTEN_C16",          "label": "Attenuator +16 dB",          "rp2040_default": 0, "service_default_override": 0, "0": "Skip +16dB",   "1": "Add +16dB"},
+    {"pin": 9, "name": "TEST_LED",           "label": "Test LED",                   "rp2040_default": 0, "service_default_override": 0, "0": "Off",          "1": "On"},
 ]
 
 # ---- Devices ----
@@ -254,7 +254,9 @@ _TLC_MAP = {info["tlc"]: dev for dev, info in _DEVICES.items()}
 _REG_NAMES = {dev: [e["name"] for e in info["pins"]] for dev, info in _DEVICES.items()}
 _REG_PINS  = {
     dev: [{"pin": e["pin"], "name": e["name"], "label": e["label"],
-           "default": e["default"], "0": e["0"], "1": e["1"]} for e in info["pins"]]
+           "rp2040_default": e["rp2040_default"],
+           "service_default_override": e["service_default_override"],
+           "0": e["0"], "1": e["1"]} for e in info["pins"]]
     for dev, info in _DEVICES.items()
 }
 
@@ -284,9 +286,24 @@ def _decode_dev_regs(dev, bits):
                 pass
         out[e["name"]] = {
             "pin": p, "label": e["label"], "value": v,
-            "default": e["default"], "meaning": e.get(str(v)) if v in (0, 1) else None,
+            "rp2040_default": e["rp2040_default"],
+            "service_default_override": e["service_default_override"],
+            "meaning": e.get(str(v)) if v in (0, 1) else None,
         }
     return out
+
+
+def _service_default_register_commands(include_readback=True):
+    cmds = []
+    for dev, info in _DEVICES.items():
+        slots = ["x"] * 10
+        for e in info["pins"]:
+            slots[e["pin"]] = str(int(e["service_default_override"]))
+        cmds.append(_nmea_cksum(f"${info['prefix']},0,{','.join(slots)}*"))
+    if include_readback:
+        for info in _DEVICES.values():
+            cmds.append(_nmea_cksum(info["query"]))
+    return cmds
 
 
 def _enum_label(m, v):
@@ -380,6 +397,10 @@ _DESC_REGISTERS = {
             "description": "Query shadow register state from firmware.",
             "arguments": {"device": {"type": "string", "required": False, "default": "all",
                                      "options": _ALL_DEVICES + ["all"]}},
+        },
+        "reset_registers_to_service_default": {
+            "description": "Apply service register defaults to all register devices and query readback.",
+            "arguments": {},
         },
     },
 }
@@ -600,6 +621,9 @@ def _cmd_registers(task_name, args):
             raise ValueError(f"Unknown device: {dev!r}. Valid: {_ALL_DEVICES + ['all']}")
         for info in targets:
             cmds.append(_nmea_cksum(info["query"]))
+
+    elif task_name == "reset_registers_to_service_default":
+        cmds.extend(_service_default_register_commands(include_readback=True))
 
     else:
         raise ValueError(f"Unknown registers command: {task_name!r}")
@@ -883,6 +907,18 @@ async def _monitor_gpsd(client, service):
 
                 if not _startup_queries_sent:
                     ok = True
+                    # Apply service-owned register overrides at startup before normal state queries.
+                    startup_register_defaults = _service_default_register_commands(include_readback=True)
+                    for idx, cmd in enumerate(startup_register_defaults):
+                        try:
+                            await _gpsd_send_async(cmd, service.str_device)
+                            logger.info(f"Startup register default command sent: {cmd}")
+                            if idx < (len(startup_register_defaults) - 1):
+                                await anyio.sleep(_REGISTER_QUERY_GAP_S)
+                        except Exception as exc:
+                            ok = False
+                            logger.warning(f"Startup register default command failed for {cmd}: {exc}")
+
                     startup_queries = [
                         "$PMITIM?*",
                         "$PMITMG?*",
@@ -1087,8 +1123,13 @@ async def _dispatch_nmea_cmd(client, service, handler, task_name, args, payload,
     failed = []
     pace_register_queries = (
         subtopic == "registers"
-        and task_name == "get_registers"
-        and str(args.get("device", "all")).lower().strip() in ("", "all")
+        and (
+            (
+                task_name == "get_registers"
+                and str(args.get("device", "all")).lower().strip() in ("", "all")
+            )
+            or task_name == "reset_registers_to_service_default"
+        )
         and len(nmea_list) > 1
     )
     for cmd in nmea_list:
