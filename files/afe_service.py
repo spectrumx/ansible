@@ -77,6 +77,7 @@ _GPSD_WATCH_CMD = b'?WATCH={"enable":true,"raw":1};\r\n'
 _USE_SERVICE_TELEM_WORKAROUND = True
 _POLL_LOOP_SLEEP_S = 0.2
 _REGISTER_QUERY_GAP_S = 0.1
+_REGISTER_RESOLVE_TIMEOUT_S = 2.0
 
 # ============================================================================
 # SOURCE-OF-TRUTH TABLES
@@ -311,6 +312,7 @@ def _enum_label(m, v):
 
 
 def _apply_register_fields(tlc, fields):
+    source = "snapshot" if len(fields) == 10 else "write_ack"
     if len(fields) == 10:
         bits = [int(b) for b in fields]
     else:
@@ -322,6 +324,10 @@ def _apply_register_fields(tlc, fields):
             bits[idx] = int(field)
     _reg["registers"][tlc] = bits
     _reg["registers_named"][_TLC_MAP[tlc]] = _decode_dev_regs(_TLC_MAP[tlc], bits)
+    _reg["registers_timestamp"][tlc] = time.time()
+    if source == "snapshot":
+        _reg["snapshot_timestamp"][tlc] = _reg["registers_timestamp"][tlc]
+    return source
 
 
 # Module-level state — written by parsers, read by publishers and command handlers.
@@ -344,6 +350,8 @@ _CSV_HEADER = (
 _reg = {
     "registers":       {info["tlc"]: [None]*10 for info in _DEVICES.values()},
     "registers_named": {dev: _decode_dev_regs(dev, [None]*10) for dev in _DEVICES},
+    "registers_timestamp": {info["tlc"]: None for info in _DEVICES.values()},
+    "snapshot_timestamp": {info["tlc"]: None for info in _DEVICES.values()},
     "service_timestamp": None,
 }
 
@@ -396,8 +404,8 @@ _DESC_REGISTERS = {
             },
         },
         "set_registers": {
-            "description": "Bulk-set registers. One NMEA per device ('x' for untouched pins).",
-            "arguments": {"<device>": {"type": "dict", "description": "Keys = register names, values = 0|1."}},
+            "description": "Set one or more named registers per device. Omitted registers or 'x' preserve current RP2040 state.",
+            "arguments": {"<device>": {"type": "dict", "description": "Keys = register names, values = 0|1|'x'."}},
             "example": {"misc": {"TRIG_TX_SRC_SEL": 1, "TEST_LED": 0}, "rx1": {"CHAN_BIAS_EN": 1}},
         },
         "set_attenuation_db": {
@@ -599,29 +607,6 @@ def _cmd_registers(task_name, args):
         if val not in (0, 1):
             raise ValueError(f"value must be 0 or 1, got {val}")
         cmds.append(_nmea_cksum(f"${_DEVICES[dev]['prefix']},{idx},{val}*"))
-
-    elif task_name == "set_registers":
-        if not isinstance(args, dict):
-            raise ValueError(f"set_registers expects object arguments, got {type(args).__name__}")
-        if not args:
-            raise ValueError("set_registers requires at least one device payload")
-        for dk, rd in args.items():
-            dev = str(dk).lower().strip()
-            if dev not in _DEVICES:
-                raise ValueError(f"Unknown device: {dev!r}. Valid: {_ALL_DEVICES}")
-            if not isinstance(rd, dict):
-                raise ValueError(f"Expected dict for {dev!r}, got {type(rd).__name__}")
-            slots = ["x"] * 10
-            for rn, v in rd.items():
-                rn_u = str(rn).upper().strip()
-                idx = _PIN_IDX[dev].get(rn_u)
-                if idx is None:
-                    raise ValueError(f"Unknown register {rn_u!r} on {dev!r}. Valid: {list(_PIN_IDX[dev])}")
-                iv = int(v)
-                if iv not in (0, 1):
-                    raise ValueError(f"value for {rn_u!r} must be 0 or 1, got {iv}")
-                slots[idx] = str(iv)
-            cmds.append(_nmea_cksum(f"${_DEVICES[dev]['prefix']},0,{','.join(slots)}*"))
 
     elif task_name == "set_attenuation_db":
         dev = str(args["device"]).lower().strip()
@@ -1135,6 +1120,121 @@ async def _send_response(client, service, resp, cmd=None, subtopic=""):
 # COMMAND PROCESSING
 # ============================================================================
 
+def _register_value_or_preserve(value):
+    if isinstance(value, str) and value.lower().strip() == "x":
+        return None
+    iv = int(value)
+    if iv not in (0, 1):
+        raise ValueError(f"register values must be 0, 1, or 'x', got {value!r}")
+    return iv
+
+
+def _normalize_set_registers_args(args):
+    if not isinstance(args, dict):
+        raise ValueError(f"set_registers expects object arguments, got {type(args).__name__}")
+    if not args:
+        raise ValueError("set_registers requires at least one device payload")
+
+    normalized = {}
+    for dk, rd in args.items():
+        dev = str(dk).lower().strip()
+        if dev not in _DEVICES:
+            raise ValueError(f"Unknown device: {dev!r}. Valid: {_ALL_DEVICES}")
+        if not isinstance(rd, dict):
+            raise ValueError(f"Expected dict for {dev!r}, got {type(rd).__name__}")
+
+        slots = [None] * 10
+        for rn, value in rd.items():
+            rn_u = str(rn).upper().strip()
+            idx = _PIN_IDX[dev].get(rn_u)
+            if idx is None:
+                raise ValueError(f"Unknown register {rn_u!r} on {dev!r}. Valid: {list(_PIN_IDX[dev])}")
+            slots[idx] = _register_value_or_preserve(value)
+        normalized[dev] = slots
+    return normalized
+
+
+def _full_register_write_cmd(dev, bits):
+    return _nmea_cksum(f"${_DEVICES[dev]['prefix']},0,{','.join(str(int(b)) for b in bits)}*")
+
+
+def _register_cache_bits(tlc):
+    bits = _reg["registers"][tlc]
+    if any(bit is None for bit in bits):
+        raise ValueError(f"No complete cached register state for {_TLC_MAP[tlc]!r}; query readback unavailable")
+    return list(bits)
+
+
+async def _wait_for_register_snapshot(tlc, previous_ts):
+    deadline = time.monotonic() + _REGISTER_RESOLVE_TIMEOUT_S
+    while time.monotonic() < deadline:
+        current_ts = _reg["snapshot_timestamp"].get(tlc)
+        if current_ts is not None and (previous_ts is None or current_ts > previous_ts):
+            return True
+        await anyio.sleep(0.05)
+    return False
+
+
+async def _resolve_set_registers_commands(client, service, args):
+    normalized = _normalize_set_registers_args(args)
+    cmds = []
+    for dev, requested in normalized.items():
+        if all(value is not None for value in requested):
+            cmds.append(_full_register_write_cmd(dev, requested))
+            continue
+
+        tlc = _DEVICES[dev]["tlc"]
+        previous_ts = _reg["snapshot_timestamp"].get(tlc)
+        query_cmd = _nmea_cksum(_DEVICES[dev]["query"])
+        logger.info(f"  NMEA → {query_cmd!r}")
+        await _gpsd_send_async(query_cmd, service.str_device)
+
+        if not await _wait_for_register_snapshot(tlc, previous_ts):
+            logger.warning(f"Register resolve query timed out for {dev}; using cached service state")
+            await _pub_event(client, service, "warning", {
+                "type": "register_resolve_timeout",
+                "device": dev,
+                "message": "Timed out waiting for RP2040 register snapshot; using cached service state",
+            })
+
+        merged = _register_cache_bits(tlc)
+        for idx, value in enumerate(requested):
+            if value is not None:
+                merged[idx] = value
+        cmds.append(_full_register_write_cmd(dev, merged))
+    return cmds
+
+
+async def _dispatch_register_set_registers(client, service, args, payload):
+    try:
+        nmea_list = await _resolve_set_registers_commands(client, service, args)
+    except (ValueError, KeyError) as exc:
+        await _send_response(client, service, {"exception": str(exc)}, payload, "registers")
+        return
+
+    await _send_response(client, service,
+                         {"state": "pending", "message": "'set_registers' sent to firmware"},
+                         payload, "registers")
+    failed = []
+    for cmd in nmea_list:
+        logger.info(f"  NMEA → {cmd!r}")
+        try:
+            await _gpsd_send_async(cmd, service.str_device)
+            if len(nmea_list) > 1:
+                await anyio.sleep(_REGISTER_QUERY_GAP_S)
+        except Exception as exc:
+            logger.error(f"gpsd_send failed for {cmd!r}: {exc}")
+            failed.append({"command": cmd, "error": str(exc)})
+
+    if failed:
+        await _send_response(client, service,
+                             {"state": "error", "message": "Command write(s) failed", "failures": failed},
+                             payload, "registers")
+    else:
+        await _send_response(client, service,
+                             {"state": "ok", "message": "'set_registers' accepted", "commands_sent": len(nmea_list)},
+                             payload, "registers")
+
 async def _dispatch_nmea_cmd(client, service, handler, task_name, args, payload, subtopic=""):
     try:
         nmea_list = handler(task_name, args)
@@ -1283,6 +1383,8 @@ async def _process_commands(client, service):
             elif sub in _HANDLERS:
                 if tn == "describe":
                     await _send_response(client, service, _DESCRIBE.get(sub, {}), payload, sub)
+                elif sub == "registers" and tn == "set_registers":
+                    await _dispatch_register_set_registers(client, service, args, payload)
                 elif _USE_SERVICE_TELEM_WORKAROUND and sub in ("imu", "mag", "hk") and tn in ("set_rate", "get_rate"):
                     await _service_reject_deprecated_rate(client, service, sub, payload)
                 else:
