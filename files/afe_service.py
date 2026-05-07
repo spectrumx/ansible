@@ -310,6 +310,20 @@ def _enum_label(m, v):
     return m.get(v, f"UNKNOWN({v})")
 
 
+def _apply_register_fields(tlc, fields):
+    if len(fields) == 10:
+        bits = [int(b) for b in fields]
+    else:
+        offset = int(fields[0])
+        bits = list(_reg["registers"][tlc])
+        for idx, field in enumerate(fields[1:], start=offset):
+            if str(field).lower() == "x":
+                continue
+            bits[idx] = int(field)
+    _reg["registers"][tlc] = bits
+    _reg["registers_named"][_TLC_MAP[tlc]] = _decode_dev_regs(_TLC_MAP[tlc], bits)
+
+
 # Module-level state — written by parsers, read by publishers and command handlers.
 _buf_gps = _make_buf(_DATA_FIELDS_GPS)
 _buf_imu = _make_buf(_DATA_FIELDS_IMU)
@@ -587,6 +601,10 @@ def _cmd_registers(task_name, args):
         cmds.append(_nmea_cksum(f"${_DEVICES[dev]['prefix']},{idx},{val}*"))
 
     elif task_name == "set_registers":
+        if not isinstance(args, dict):
+            raise ValueError(f"set_registers expects object arguments, got {type(args).__name__}")
+        if not args:
+            raise ValueError("set_registers requires at least one device payload")
         for dk, rd in args.items():
             dev = str(dk).lower().strip()
             if dev not in _DEVICES:
@@ -845,27 +863,27 @@ def _parse_pmitsr(line):
     try:
         parts = line.split("*")[0].split(",")
         if len(parts) < 3:
-            return
+            return None
         status, tlc, fields = str(parts[1]), parts[2], parts[3:]
 
         if status != "0":
             logger.debug(f"$PMITSR error status={status!r} tlc={tlc!r}")
             _params["last_error"] = {"status": status, "tlc": tlc, "fields": fields}
             _reg["service_timestamp"] = time.time()
-            return
+            return None
 
         if tlc in _TLC_MAP:
-            try: bits = [int(b) for b in fields[:10]]
-            except ValueError: bits = fields[:10]
-            _reg["registers"][tlc] = bits
-            _reg["registers_named"][_TLC_MAP[tlc]] = _decode_dev_regs(_TLC_MAP[tlc], bits)
+            _apply_register_fields(tlc, fields)
+            parsed = "registers"
 
         elif tlc == "IM?" and len(fields) >= 5:
             _params["imu"].update(acc_odr=fields[0], gyr_odr=fields[1],
                                   ahiperf=int(fields[2]), aulp=int(fields[3]), glp=int(fields[4]))
+            parsed = "imu"
 
         elif tlc == "MG?" and len(fields) >= 2:
             _params["mag"].update(ccr=int(fields[0]), updr=int(fields[1]))
+            parsed = "mag"
 
         elif tlc == "R?" and len(fields) >= 3:
             # Firmware reports per-stream rates, but service polling uses one owned interval.
@@ -874,6 +892,7 @@ def _parse_pmitsr(line):
                 "mag_rate_s": int(fields[1]),
                 "imu_rate_s": int(fields[2]),
             }
+            parsed = "rates"
 
         elif tlc == "TP?" and len(fields) >= 2:
             ts, te = int(fields[0]), int(fields[1])
@@ -881,13 +900,17 @@ def _parse_pmitsr(line):
                 "time_source": ts, "time_source_label": _enum_label(_TIME_SOURCE_LABELS, ts),
                 "time_epoch": te,  "time_epoch_label":  _enum_label(_TIME_EPOCH_LABELS, te),
             }
+            parsed = "time"
 
         else:
             _params[tlc] = fields
+            parsed = tlc
 
         _reg["service_timestamp"] = time.time()
+        return parsed
     except Exception:
         logger.debug(f"$PMITSR parse error: {line!r}", exc_info=True)
+        return None
 
 
 # ============================================================================
@@ -1012,7 +1035,7 @@ async def _pub_event(client, service, etype, payload):
 
 async def _handle_pmitsr(client, service, line):
     global _seq_reg, _seq_imu, _seq_mag, _seq_time
-    _parse_pmitsr(line)
+    parsed = _parse_pmitsr(line)
 
     parts = line.split("*")[0].split(",")
     if len(parts) < 3:
@@ -1025,6 +1048,8 @@ async def _handle_pmitsr(client, service, line):
         return
 
     if tlc in _TLC_MAP:
+        if parsed != "registers":
+            return
         _seq_reg += 1
         await client.publish(service.topic_status_registers, msgspec.json.encode({
             "seq": _seq_reg, "timestamp": time.time(),
