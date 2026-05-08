@@ -295,6 +295,23 @@ def _decode_dev_regs(dev, bits):
     return out
 
 
+def _attenuation_db_from_bits(bits):
+    try:
+        values = [int(bits[idx]) for idx in range(4, 9)]
+    except (TypeError, ValueError):
+        return None
+    if any(value not in (0, 1) for value in values):
+        return None
+    return sum(value << idx for idx, value in enumerate(values))
+
+
+def _attenuation_db_status():
+    return {
+        dev: _attenuation_db_from_bits(_reg["registers"][_DEVICES[dev]["tlc"]])
+        for dev in _RX_DEVICES
+    }
+
+
 def _service_default_register_commands(include_readback=True):
     cmds = []
     for dev, info in _DEVICES.items():
@@ -420,6 +437,11 @@ _DESC_REGISTERS = {
             "description": "Query shadow register state from firmware.",
             "arguments": {"device": {"type": "string", "required": False, "default": "all",
                                      "options": _ALL_DEVICES + ["all"]}},
+        },
+        "get_attenuation_db": {
+            "description": "Query RX attenuator state and publish derived dB values in status.",
+            "arguments": {"device": {"type": "string", "required": False, "default": "all",
+                                     "options": _RX_DEVICES + ["all"]}},
         },
         "reset_registers_to_service_default": {
             "description": "Apply service register defaults to all register devices and query readback.",
@@ -625,6 +647,14 @@ def _cmd_registers(task_name, args):
             raise ValueError(f"Unknown device: {dev!r}. Valid: {_ALL_DEVICES + ['all']}")
         for info in targets:
             cmds.append(_nmea_cksum(info["query"]))
+
+    elif task_name == "get_attenuation_db":
+        dev = str(args.get("device", "all")).lower().strip()
+        targets = _RX_DEVICES if dev in ("all", "") else [dev] if dev in _RX_DEVICES else None
+        if targets is None:
+            raise ValueError(f"Unknown RX device: {dev!r}. Valid: {_RX_DEVICES + ['all']}")
+        for target in targets:
+            cmds.append(_nmea_cksum(_DEVICES[target]["query"]))
 
     elif task_name == "reset_registers_to_service_default":
         cmds.extend(_service_default_register_commands(include_readback=True))
@@ -1040,6 +1070,7 @@ async def _handle_pmitsr(client, service, line):
         await client.publish(service.topic_status_registers, msgspec.json.encode({
             "seq": _seq_reg, "timestamp": time.time(),
             "registers": _reg["registers"], "registers_named": _reg["registers_named"],
+            "attenuation_db": _attenuation_db_status(),
         }), retain=True)
 
     elif tlc == "IM?":
@@ -1252,6 +1283,10 @@ async def _dispatch_nmea_cmd(client, service, handler, task_name, args, payload,
         and (
             (
                 task_name == "get_registers"
+                and str(args.get("device", "all")).lower().strip() in ("", "all")
+            )
+            or (
+                task_name == "get_attenuation_db"
                 and str(args.get("device", "all")).lower().strip() in ("", "all")
             )
             or task_name == "reset_registers_to_service_default"
