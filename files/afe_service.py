@@ -77,6 +77,7 @@ _GPSD_WATCH_CMD = b'?WATCH={"enable":true,"raw":1};\r\n'
 _USE_SERVICE_TELEM_WORKAROUND = True
 _POLL_LOOP_SLEEP_S = 0.2
 _REGISTER_QUERY_GAP_S = 0.1
+_REGISTER_WRITE_GAP_S = 0.3
 _REGISTER_RESOLVE_TIMEOUT_S = 2.0
 
 # ============================================================================
@@ -1221,7 +1222,7 @@ async def _dispatch_register_set_registers(client, service, args, payload):
         try:
             await _gpsd_send_async(cmd, service.str_device)
             if len(nmea_list) > 1:
-                await anyio.sleep(_REGISTER_QUERY_GAP_S)
+                await anyio.sleep(_REGISTER_WRITE_GAP_S)
         except Exception as exc:
             logger.error(f"gpsd_send failed for {cmd!r}: {exc}")
             failed.append({"command": cmd, "error": str(exc)})
