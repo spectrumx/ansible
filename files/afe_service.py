@@ -93,8 +93,8 @@ _REGISTER_RESOLVE_TIMEOUT_S = 2.0
 # ---- Pin tables ----
 
 _MISC_PINS = [
-    {"pin": 0, "name": "TRIG_TX_SRC_SEL",   "label": "TX Trigger Source Select",   "rp2040_default": 1, "service_default_override": 1, "0": "Internal",     "1": "External"},
-    {"pin": 1, "name": "TRIG_RX_SRC_SEL",   "label": "RX Trigger Source Select",   "rp2040_default": 1, "service_default_override": 1, "0": "Internal",     "1": "External"},
+    {"pin": 0, "name": "TRIG_TX_SRC_SEL",   "label": "TX Trigger Source Select",   "rp2040_default": 1, "service_default_override": 0, "0": "Internal",     "1": "External"},
+    {"pin": 1, "name": "TRIG_RX_SRC_SEL",   "label": "RX Trigger Source Select",   "rp2040_default": 1, "service_default_override": 0, "0": "Internal",     "1": "External"},
     {"pin": 2, "name": "EXT_TX_TRIG_ENABLE", "label": "External TX Trigger Enable", "rp2040_default": 1, "service_default_override": 1, "0": "Enabled",      "1": "Disabled"},
     {"pin": 3, "name": "EXT_RX_TRIG_ENABLE", "label": "External RX Trigger Enable", "rp2040_default": 1, "service_default_override": 1, "0": "Enabled",      "1": "Disabled"},
     {"pin": 4, "name": "NOT_USED_4",         "label": "Not Used (4)",               "rp2040_default": 0, "service_default_override": 0, "0": "Reserved",     "1": "Reserved"},
