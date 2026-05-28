@@ -1,8 +1,9 @@
 [connection]
 id=Ethernet DHCP server
 type=ethernet
-autoconnect-priority=-10
-interface-name=en0
+autoconnect-priority=1
+autoconnect-retries=0
+multi-connect=1
 
 [ethernet]
 

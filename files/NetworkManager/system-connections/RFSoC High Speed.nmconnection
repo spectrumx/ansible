@@ -1,6 +1,8 @@
 [connection]
-id=RFSoC High Speed
+id=RFSoC High Speed (en2)
 type=ethernet
+autoconnect-priority=10
+autoconnect-retries=0
 interface-name=en2
 
 [ethernet]

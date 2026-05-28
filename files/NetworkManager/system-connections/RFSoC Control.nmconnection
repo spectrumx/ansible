@@ -1,6 +1,8 @@
 [connection]
-id=RFSoC Control
+id=RFSoC Control (en1)
 type=ethernet
+autoconnect-priority=10
+autoconnect-retries=0
 interface-name=en1
 
 [ethernet]
