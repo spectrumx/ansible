@@ -57,13 +57,10 @@
       owner: root
       group: root
 
-  - name: copy udev 70-wifi-ap-dev.rules
-    copy:
-      src: "files/70-wifi-ap-dev.rules"
-      dest: /etc/udev/rules.d/70-wifi-ap-dev.rules
-      mode: 0644
-      owner: root
-      group: root
+  - name: Remove old udev 70-wifi-ap-dev.rules
+    file:
+      path: /etc/udev/rules.d/70-wifi-ap-dev.rules
+      state: absent
 
   - name: copy udev 99-usb-serial.rules
     copy:
