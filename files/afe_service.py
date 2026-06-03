@@ -137,10 +137,10 @@ _DEVICES = {
     "misc": {"pins": _MISC_PINS, "prefix": "PMITMAX", "query": "$PMITMA?*",  "tlc": "MA?"},
     "tx1":  {"pins": _TX_PINS,   "prefix": "PMITXT1", "query": "$PMITXT1?*", "tlc": "XT1"},
     "tx2":  {"pins": _TX_PINS,   "prefix": "PMITXT2", "query": "$PMITXT2?*", "tlc": "XT2"},
-    "rx1":  {"pins": _RX_PINS,   "prefix": "PMITXR1", "query": "$PMITXR1?*", "tlc": "XR1"},
-    "rx2":  {"pins": _RX_PINS,   "prefix": "PMITXR2", "query": "$PMITXR2?*", "tlc": "XR2"},
-    "rx3":  {"pins": _RX_PINS,   "prefix": "PMITXR3", "query": "$PMITXR3?*", "tlc": "XR3"},
-    "rx4":  {"pins": _RX_PINS,   "prefix": "PMITXR4", "query": "$PMITXR4?*", "tlc": "XR4"},
+    "rxd":  {"pins": _RX_PINS,   "prefix": "PMITXR1", "query": "$PMITXR1?*", "tlc": "XR1"},
+    "rxc":  {"pins": _RX_PINS,   "prefix": "PMITXR2", "query": "$PMITXR2?*", "tlc": "XR2"},
+    "rxb":  {"pins": _RX_PINS,   "prefix": "PMITXR3", "query": "$PMITXR3?*", "tlc": "XR3"},
+    "rxa":  {"pins": _RX_PINS,   "prefix": "PMITXR4", "query": "$PMITXR4?*", "tlc": "XR4"},
 }
 
 # ---- IMU ODR table (names match controller.py odrDictList exactly) ----
@@ -424,7 +424,7 @@ _DESC_REGISTERS = {
         "set_registers": {
             "description": "Set one or more named registers per device. Omitted registers or 'x' preserve current RP2040 state.",
             "arguments": {"<device>": {"type": "dict", "description": "Keys = register names, values = 0|1|'x'."}},
-            "example": {"misc": {"TRIG_TX_SRC_SEL": 1, "TEST_LED": 0}, "rx1": {"CHAN_BIAS_EN": 1}},
+            "example": {"misc": {"TRIG_TX_SRC_SEL": 1, "TEST_LED": 0}, "rxd": {"CHAN_BIAS_EN": 1}},
         },
         "set_attenuation_db": {
             "description": "Set RX attenuator (0-31 dB, 5-bit binary).",
@@ -635,7 +635,7 @@ def _cmd_registers(task_name, args):
         dev = str(args["device"]).lower().strip()
         db = int(args["db"])
         if dev not in _DEVICES or not dev.startswith("rx"):
-            raise ValueError(f"{dev!r} is not an RX device (rx1..rx4)")
+            raise ValueError(f"{dev!r} is not an RX device. Valid: {_RX_DEVICES}")
         if not 0 <= db <= 31:
             raise ValueError(f"attenuation must be 0..31 dB, got {db}")
         cmds.append(_nmea_cksum(f"${_DEVICES[dev]['prefix']},4,{','.join(str((db>>i)&1) for i in range(5))}*"))
