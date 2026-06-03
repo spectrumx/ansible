@@ -137,10 +137,10 @@ _DEVICES = {
     "misc": {"pins": _MISC_PINS, "prefix": "PMITMAX", "query": "$PMITMA?*",  "tlc": "MA?"},
     "tx1":  {"pins": _TX_PINS,   "prefix": "PMITXT1", "query": "$PMITXT1?*", "tlc": "XT1"},
     "tx2":  {"pins": _TX_PINS,   "prefix": "PMITXT2", "query": "$PMITXT2?*", "tlc": "XT2"},
-    "rxd":  {"pins": _RX_PINS,   "prefix": "PMITXR1", "query": "$PMITXR1?*", "tlc": "XR1"},
-    "rxc":  {"pins": _RX_PINS,   "prefix": "PMITXR2", "query": "$PMITXR2?*", "tlc": "XR2"},
-    "rxb":  {"pins": _RX_PINS,   "prefix": "PMITXR3", "query": "$PMITXR3?*", "tlc": "XR3"},
     "rxa":  {"pins": _RX_PINS,   "prefix": "PMITXR4", "query": "$PMITXR4?*", "tlc": "XR4"},
+    "rxb":  {"pins": _RX_PINS,   "prefix": "PMITXR3", "query": "$PMITXR3?*", "tlc": "XR3"},
+    "rxc":  {"pins": _RX_PINS,   "prefix": "PMITXR2", "query": "$PMITXR2?*", "tlc": "XR2"},
+    "rxd":  {"pins": _RX_PINS,   "prefix": "PMITXR1", "query": "$PMITXR1?*", "tlc": "XR1"},
 }
 
 # ---- IMU ODR table (names match controller.py odrDictList exactly) ----
