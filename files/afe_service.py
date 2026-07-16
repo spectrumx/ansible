@@ -121,7 +121,9 @@ _TX_PINS = [
 _RX_PINS = [
     {"pin": 0, "name": "CHAN_BIAS_EN",       "label": "Channel Bias Enable",       "rp2040_default": 0, "service_default_override": 0, "0": "Disabled",     "1": "Enabled"},
     {"pin": 1, "name": "INT_RF_TRIG_SEL",    "label": "Internal RF Trigger Select", "rp2040_default": 1, "service_default_override": 1, "0": "Not asserted", "1": "Asserted"},
-    {"pin": 2, "name": "FILTER_BYPASS_SEL",  "label": "Filter Bypass Select",       "rp2040_default": 1, "service_default_override": 1, "0": "Bypassed",     "1": "Filtered"},
+    # P2 (pin3) on MAX chip controls CTRL on JSW2-63DR+: CTRL high selects RF1, CTRL low selects RF2; RF1 is no filter, RF2 is filtered. this is BACKWARDS from the stated comment in the RP2040's controller.py code
+    {"pin": 2, "name": "FILTER_BYPASS_SEL",  "label": "Filter Bypass Select",       "rp2040_default": 1, "service_default_override": 1, "0": "Filtered",     "1": "Bypassed"},
+    # CTL high = amplifier enabled, CTL low = amplifier bypassed; controlled directly through pin 9 CTL on the AM1065 via a 10k resistor and capacitor to ground.
     {"pin": 3, "name": "AMP_BYPASS_SEL",     "label": "Amplifier Bypass Select",    "rp2040_default": 1, "service_default_override": 1, "0": "Bypassed",     "1": "Enabled"},
     {"pin": 4, "name": "ATTEN_C1",           "label": "Attenuator +1 dB",           "rp2040_default": 0, "service_default_override": 0, "0": "Skip +1dB",    "1": "Add +1dB"},
     {"pin": 5, "name": "ATTEN_C2",           "label": "Attenuator +2 dB",           "rp2040_default": 0, "service_default_override": 0, "0": "Skip +2dB",    "1": "Add +2dB"},
