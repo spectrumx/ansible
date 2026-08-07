@@ -67,6 +67,11 @@
       - /etc/systemd/system/afe_serial_ttybus.service
       - /etc/systemd/system/afe_serial.target
 
+  - name: Remove old telemetry data
+    file:
+      path: /data/telemetry_log
+      state: absent
+
   - name: Configure chrony
     blockinfile:
       path: /etc/chrony/chrony.conf
