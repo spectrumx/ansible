@@ -121,7 +121,9 @@ _TX_PINS = [
 _RX_PINS = [
     {"pin": 0, "name": "CHAN_BIAS_EN",       "label": "Channel Bias Enable",       "rp2040_default": 0, "service_default_override": 0, "0": "Disabled",     "1": "Enabled"},
     {"pin": 1, "name": "INT_RF_TRIG_SEL",    "label": "Internal RF Trigger Select", "rp2040_default": 1, "service_default_override": 1, "0": "Not asserted", "1": "Asserted"},
-    {"pin": 2, "name": "FILTER_BYPASS_SEL",  "label": "Filter Bypass Select",       "rp2040_default": 1, "service_default_override": 1, "0": "Bypassed",     "1": "Filtered"},
+    # P2 (pin3) on MAX chip controls CTRL on JSW2-63DR+: CTRL high selects RF1, CTRL low selects RF2; RF1 is no filter, RF2 is filtered. this is BACKWARDS from the stated comment in the RP2040's controller.py code
+    {"pin": 2, "name": "FILTER_BYPASS_SEL",  "label": "Filter Bypass Select",       "rp2040_default": 1, "service_default_override": 1, "0": "Filtered",     "1": "Bypassed"},
+    # CTL high = amplifier enabled, CTL low = amplifier bypassed; controlled directly through pin 9 CTL on the AM1065 via a 10k resistor and capacitor to ground.
     {"pin": 3, "name": "AMP_BYPASS_SEL",     "label": "Amplifier Bypass Select",    "rp2040_default": 1, "service_default_override": 1, "0": "Bypassed",     "1": "Enabled"},
     {"pin": 4, "name": "ATTEN_C1",           "label": "Attenuator +1 dB",           "rp2040_default": 0, "service_default_override": 0, "0": "Skip +1dB",    "1": "Add +1dB"},
     {"pin": 5, "name": "ATTEN_C2",           "label": "Attenuator +2 dB",           "rp2040_default": 0, "service_default_override": 0, "0": "Skip +2dB",    "1": "Add +2dB"},
@@ -137,10 +139,10 @@ _DEVICES = {
     "misc": {"pins": _MISC_PINS, "prefix": "PMITMAX", "query": "$PMITMA?*",  "tlc": "MA?"},
     "tx1":  {"pins": _TX_PINS,   "prefix": "PMITXT1", "query": "$PMITXT1?*", "tlc": "XT1"},
     "tx2":  {"pins": _TX_PINS,   "prefix": "PMITXT2", "query": "$PMITXT2?*", "tlc": "XT2"},
-    "rx1":  {"pins": _RX_PINS,   "prefix": "PMITXR1", "query": "$PMITXR1?*", "tlc": "XR1"},
-    "rx2":  {"pins": _RX_PINS,   "prefix": "PMITXR2", "query": "$PMITXR2?*", "tlc": "XR2"},
-    "rx3":  {"pins": _RX_PINS,   "prefix": "PMITXR3", "query": "$PMITXR3?*", "tlc": "XR3"},
-    "rx4":  {"pins": _RX_PINS,   "prefix": "PMITXR4", "query": "$PMITXR4?*", "tlc": "XR4"},
+    "rxa":  {"pins": _RX_PINS,   "prefix": "PMITXR4", "query": "$PMITXR4?*", "tlc": "XR4"},
+    "rxb":  {"pins": _RX_PINS,   "prefix": "PMITXR3", "query": "$PMITXR3?*", "tlc": "XR3"},
+    "rxc":  {"pins": _RX_PINS,   "prefix": "PMITXR2", "query": "$PMITXR2?*", "tlc": "XR2"},
+    "rxd":  {"pins": _RX_PINS,   "prefix": "PMITXR1", "query": "$PMITXR1?*", "tlc": "XR1"},
 }
 
 # ---- IMU ODR table (names match controller.py odrDictList exactly) ----
@@ -424,7 +426,7 @@ _DESC_REGISTERS = {
         "set_registers": {
             "description": "Set one or more named registers per device. Omitted registers or 'x' preserve current RP2040 state.",
             "arguments": {"<device>": {"type": "dict", "description": "Keys = register names, values = 0|1|'x'."}},
-            "example": {"misc": {"TRIG_TX_SRC_SEL": 1, "TEST_LED": 0}, "rx1": {"CHAN_BIAS_EN": 1}},
+            "example": {"misc": {"TRIG_TX_SRC_SEL": 1, "TEST_LED": 0}, "rxd": {"CHAN_BIAS_EN": 1}},
         },
         "set_attenuation_db": {
             "description": "Set RX attenuator (0-31 dB, 5-bit binary).",
@@ -635,7 +637,7 @@ def _cmd_registers(task_name, args):
         dev = str(args["device"]).lower().strip()
         db = int(args["db"])
         if dev not in _DEVICES or not dev.startswith("rx"):
-            raise ValueError(f"{dev!r} is not an RX device (rx1..rx4)")
+            raise ValueError(f"{dev!r} is not an RX device. Valid: {_RX_DEVICES}")
         if not 0 <= db <= 31:
             raise ValueError(f"attenuation must be 0..31 dB, got {db}")
         cmds.append(_nmea_cksum(f"${_DEVICES[dev]['prefix']},4,{','.join(str((db>>i)&1) for i in range(5))}*"))
