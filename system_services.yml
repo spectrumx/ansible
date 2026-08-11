@@ -10,14 +10,6 @@
       group: mep
       mode: 0777
 
-  - name: copy afe_service software
-    copy:
-      src: "files/afe_service.py"
-      dest: "/opt/afe/afe_service.py"
-      mode: 0755
-      owner: mep
-      group: mep
-
   - name: copy afe_control service
     copy:
       src: "files/afe_control.service"
@@ -27,6 +19,17 @@
       group: root
     notify:
       - Enable afe_control
+      - Restart afe_control
+
+  - name: copy afe_service software
+    copy:
+      src: "files/afe_service.py"
+      dest: "/opt/afe/afe_service.py"
+      mode: 0755
+      owner: mep
+      group: mep
+    notify:
+      - Restart afe_control
 
   handlers:
 
@@ -34,7 +37,12 @@
     systemd:
       name: afe_control.service
       daemon_reload: yes
-      state: started
       enabled: yes
+
+  - name: Restart afe_control
+    systemd:
+      name: afe_control.service
+      daemon_reload: yes
+      state: restarted
 
 
