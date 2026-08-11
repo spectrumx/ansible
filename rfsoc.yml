@@ -1,0 +1,30 @@
+---
+- hosts: rfsoc
+  ignore_errors: true
+  ignore_unreachable: true
+  tasks:
+
+  - name: Install mep-rfsoc-sdr Python package
+    ansible.builtin.pip:
+      name:
+        - https://github.com/spectrumx/mep-rfsoc-sdr/releases/download/v0.1.2/mep_rfsoc_sdr-0.1.2-py3-none-any.whl
+        - paho-mqtt
+      # no-deps because have additional pynq dependency but it uses git
+      # sources and reinstalls every time even if it doesn't change
+      extra_args: "--no-deps"
+      state: present
+      executable: /usr/local/share/pynq-venv/bin/pip
+
+  - name: Link mep-rfsoc-sdr service from Python module
+    ansible.builtin.file:
+      state: link
+      src: /usr/local/share/pynq-venv/lib/python3.10/site-packages/mep_rfsoc_sdr/systemd/mep-rfsoc-sdr.service
+      path: /etc/systemd/system/mep-rfsoc-sdr.service
+      force: true
+
+  - name: Enable mep-rfsoc-sdr service on RFSoC
+    ansible.builtin.systemd:
+      name: mep-rfsoc-sdr.service
+      daemon_reload: true
+      enabled: true
+      no_block: true
