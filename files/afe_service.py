@@ -1397,8 +1397,9 @@ async def _poll_telem(client, service):
             if _USE_SERVICE_TELEM_WORKAROUND and interval > 0:
                 cmd = _nmea_cksum("$TELEM?*")
                 await _gpsd_send_async(cmd, service.str_device)
-                # Sleep until interval expires OR poll_interval changes
-                _poll_interval_changed.clear()
+                # Sleep until interval expires OR poll_interval changes.
+                # anyio.Event is one-shot (no .clear()) — re-arm with a fresh instance.
+                _poll_interval_changed = anyio.Event()
                 with anyio.move_on_after(interval):
                     await _poll_interval_changed.wait()
                 continue
@@ -1643,8 +1644,9 @@ async def _emit_csv(service):
                 except Exception:
                     logger.exception("CSV write error")
 
-            # Sleep until rate expires OR log_rate changes
-            _log_rate_changed.clear()
+            # Sleep until rate expires OR log_rate changes.
+            # anyio.Event is one-shot (no .clear()) — re-arm with a fresh instance.
+            _log_rate_changed = anyio.Event()
             with anyio.move_on_after(rate):
                 await _log_rate_changed.wait()
     finally:
