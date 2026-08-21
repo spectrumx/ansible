@@ -28,7 +28,7 @@
 #
 # Usage:
 #   python afe_service.py
-#   Env prefix: AFE_  (AFE_MQTT_HOST, AFE_GPSD_HOST, ...)
+#   python afe_service.py --mqtt_host=... --gpsd_host=... (see --help for all fields)
 
 import csv
 import dataclasses
@@ -121,7 +121,7 @@ _TX_PINS = [
 _RX_PINS = [
     {"pin": 0, "name": "CHAN_BIAS_EN",       "label": "Channel Bias Enable",       "rp2040_default": 0, "service_default_override": 0, "0": "Disabled",     "1": "Enabled"},
     {"pin": 1, "name": "INT_RF_TRIG_SEL",    "label": "Internal RF Trigger Select", "rp2040_default": 1, "service_default_override": 1, "0": "Not asserted", "1": "Asserted"},
-    # P2 (pin3) on MAX chip controls CTRL on JSW2-63DR+: CTRL high selects RF1, CTRL low selects RF2; RF1 is no filter, RF2 is filtered. this is BACKWARDS from the stated comment in the RP2040's controller.py code
+    # P2 (pin3) on MAX chip controls CTRL on JSW2-63DR+: CTRL high selects RF1, CTRL low selects RF2; RF1 is no filter, RF2 is filtered. this is BACKWARDS from the stated comment in the RP2040's controller.py code as of 7/15/2026.
     {"pin": 2, "name": "FILTER_BYPASS_SEL",  "label": "Filter Bypass Select",       "rp2040_default": 1, "service_default_override": 1, "0": "Filtered",     "1": "Bypassed"},
     # CTL high = amplifier enabled, CTL low = amplifier bypassed; controlled directly through pin 9 CTL on the AM1065 via a 10k resistor and capacitor to ground.
     {"pin": 3, "name": "AMP_BYPASS_SEL",     "label": "Amplifier Bypass Select",    "rp2040_default": 1, "service_default_override": 1, "0": "Bypassed",     "1": "Enabled"},
@@ -242,7 +242,6 @@ _TIME_EPOCH_LABELS  = {0: "NOTSET", 1: "PPS",  2: "NMEA", 3: "IMMEDIATE"}
 _ALL_DEVICES     = list(_DEVICES)
 _RX_DEVICES      = [d for d in _DEVICES if d.startswith("rx")]
 _ATTEN_DB_RANGE  = [0, 31]
-_LOG_RATE_RANGE  = [1, 3600]
 _LOG_MODE_OPTS   = list(_LOG_MODES)
 _ACC_ODR_OPTIONS = [e["name"] for e in _IMU_ODR_TABLE if e["acc"]]
 _GYR_ODR_OPTIONS = [e["name"] for e in _IMU_ODR_TABLE if e["gyr"]]
@@ -387,6 +386,8 @@ _params = {
 
 _startup_queries_sent = False
 _gpsd_send_lock = None
+_log_rate_changed = None  # Event: set when log rate changes, wakes _emit_csv
+_poll_interval_changed = None  # Event: set when poll interval changes, wakes _poll_telem
 
 # ============================================================================
 # DESCRIBE SCHEMAS (built from source tables — zero hand-duplicated args)
@@ -518,15 +519,15 @@ _DESC_TIME = {
 
 _DESC_LOGGING = {
     "subtopic": "logging",
-    "reference": {"log_rate_range": _LOG_RATE_RANGE, "log_mode_options": _LOG_MODE_OPTS},
+    "reference": {"log_mode_options": _LOG_MODE_OPTS},  # log_rate_current added dynamically in _send_announce
     "commands": {
         "enable_logging":       {"description": "Enable CSV telemetry logging.",  "arguments": {}},
         "disable_logging":      {"description": "Disable CSV telemetry logging.", "arguments": {}},
         "get_log_status":       {"description": "Get current logging state.",     "arguments": {}},
         "set_log_path":         {"description": "Change log output directory.",
                                  "arguments": {"path": {"type": "string"}}},
-        "set_log_rate_sec":     {"description": "Change CSV flush interval.",
-                                 "arguments": {"n": {"type": "int", "range": _LOG_RATE_RANGE}}},
+        "set_log_rate_sec":     {"description": "Change CSV flush interval (seconds, fractional allowed).",
+                                 "arguments": {"n": {"type": "float"}}},
         "set_service_log_mode": {"description": "Set script diagnostic verbosity.",
                                  "arguments": {"mode": {"type": "string", "options": _LOG_MODE_OPTS}}},
         "get_service_log_mode": {"description": "Get current script diagnostic verbosity.", "arguments": {}},
@@ -1109,6 +1110,20 @@ async def _handle_pmitsr(client, service, line):
 
 
 async def _send_announce(client, service):
+    describe = dict(_DESCRIBE)
+    logging_desc = dict(describe["logging"])
+    logging_ref = dict(logging_desc["reference"])
+    logging_ref["log_rate_current"] = service.int_telem_rate
+    logging_ref["log_path_current"] = service.str_log_dir
+    logging_desc["reference"] = logging_ref
+    describe["logging"] = logging_desc
+
+    polling_desc = dict(describe["polling"])
+    polling_ref = dict(polling_desc["reference"])
+    polling_ref["poll_interval_current"] = _effective_poll_interval_s()
+    polling_desc["reference"] = polling_ref
+    describe["polling"] = polling_desc
+    
     await client.publish(service.topic_announce, msgspec.json.encode({
         "title": "AFE service",
         "description": "Control and monitor MEP analog front-end instrument (RP2040)",
@@ -1122,7 +1137,7 @@ async def _send_announce(client, service):
             "event": f"{service.name}/event",
         },
         "command_subtopics": _command_topic_map(service.topic_command),
-        "describe": _DESCRIBE,
+        "describe": describe,
     }), retain=True)
 
 
@@ -1326,6 +1341,7 @@ async def _service_reject_deprecated_rate(client, service, sub, payload):
 
 
 async def _service_set_interval(client, service, args, payload):
+    global _poll_interval_changed
     try:
         n = int(args["n"])
     except (KeyError, TypeError, ValueError):
@@ -1339,6 +1355,7 @@ async def _service_set_interval(client, service, args, payload):
         return
 
     _set_poll_interval_s(n)
+    _poll_interval_changed.set()  # Wake _poll_telem immediately
     await _send_response(client, service,
                          {
                              "state": "ok",
@@ -1373,13 +1390,17 @@ async def _service_telem_dump(client, service, payload):
 
 
 async def _poll_telem(client, service):
+    global _poll_interval_changed
     while True:
         try:
             interval = _effective_poll_interval_s()
             if _USE_SERVICE_TELEM_WORKAROUND and interval > 0:
                 cmd = _nmea_cksum("$TELEM?*")
                 await _gpsd_send_async(cmd, service.str_device)
-                await anyio.sleep(interval)
+                # Sleep until interval expires OR poll_interval changes
+                _poll_interval_changed.clear()
+                with anyio.move_on_after(interval):
+                    await _poll_interval_changed.wait()
                 continue
         except Exception as exc:
             await _pub_event(client, service, "error",
@@ -1486,11 +1507,13 @@ async def _handle_logging(client, service, tn, args, payload):
         await _send_response(client, service, {"state": "ok", "telemetry_log_dir": service.str_log_dir}, payload, s)
         await _send_status(client, service)
     elif tn == "set_log_rate_sec":
-        n = int(args["n"])
-        if n < 1:
-            await _send_response(client, service, {"exception": f"log_rate_s must be >= 1, got {n}"}, payload, s)
+        global _log_rate_changed
+        n = float(args["n"])
+        if n <= 0:
+            await _send_response(client, service, {"exception": f"log_rate_s must be > 0, got {n}"}, payload, s)
         else:
             service.int_telem_rate = n
+            _log_rate_changed.set()  # Wake _emit_csv immediately
             await _send_response(client, service, {"state": "ok", "telemetry_log_rate_s": n}, payload, s)
             await _send_status(client, service)
     elif tn == "set_service_log_mode":
@@ -1523,7 +1546,7 @@ class AfeService:
     gpsd_host: str = "localhost"
     gpsd_port: int = 2947
     str_device: str = "/dev/ttyGNSS1"
-    int_telem_rate: int = 60
+    int_telem_rate: float = 10
     str_log_dir: str = "/data/log_telemetry"
     bool_logging_enabled: bool = True
 
@@ -1560,28 +1583,72 @@ class AfeService:
 # CSV LOGGING
 # ============================================================================
 
-async def _emit_csv(service):
-    while True:
-        await anyio.sleep(max(1, int(service.int_telem_rate)))
-        if not service.bool_logging_enabled:
-            continue
+# Persistent handle for the always-on telemetry log. Reopened only when the
+# log directory or calendar day changes; every row is fsynced individually,
+# so durability never depends on this handle surviving to be closed cleanly.
+_csv_fh = None
+_csv_writer = None
+_csv_key = None  # (log_dir, date_str) the open handle corresponds to
+
+
+def _csv_close():
+    global _csv_fh, _csv_writer, _csv_key
+    if _csv_fh is not None:
         try:
-            now = datetime.now(timezone.utc)
-            os.makedirs(service.str_log_dir, exist_ok=True)
-            path = os.path.join(service.str_log_dir, f"telemetry_{now.strftime('%Y%m%d')}.csv")
-            write_header = not os.path.exists(path) or os.path.getsize(path) == 0
-            with open(path, "a", newline="", encoding="utf-8") as f:
-                w = csv.writer(f)
-                if write_header:
-                    w.writerow(_CSV_HEADER)
-                row = [now.isoformat()]
-                for buf in (_buf_gps, _buf_mag, _buf_imu, _buf_hk):
-                    row.extend(buf.values())
-                row.append(json.dumps(_reg["registers"], sort_keys=True, separators=(",", ":")))
-                w.writerow(row)
-            logger.info(f"Telemetry logged: {path}")
+            _csv_fh.flush()
+            os.fsync(_csv_fh.fileno())
+            _csv_fh.close()
         except Exception:
-            logger.exception("CSV write error")
+            logger.exception("CSV close error")
+    _csv_fh, _csv_writer, _csv_key = None, None, None
+
+
+def _csv_ensure_open(service, now):
+    """(Re)open the log file if the log dir or day changed. Always append, never truncate."""
+    global _csv_fh, _csv_writer, _csv_key
+    key = (service.str_log_dir, now.strftime("%Y%m%d"))
+    if key == _csv_key and _csv_fh is not None:
+        return
+    _csv_close()
+    log_dir, date_str = key
+    os.makedirs(log_dir, exist_ok=True)
+    path = os.path.join(log_dir, f"telemetry_{date_str}.csv")
+    write_header = not os.path.exists(path) or os.path.getsize(path) == 0
+    fh = open(path, "a", newline="", encoding="utf-8")
+    writer = csv.writer(fh)
+    if write_header:
+        writer.writerow(_CSV_HEADER)
+        fh.flush()
+        os.fsync(fh.fileno())
+    _csv_fh, _csv_writer, _csv_key = fh, writer, key
+
+
+async def _emit_csv(service):
+    global _log_rate_changed
+    try:
+        while True:
+            rate = float(service.int_telem_rate)
+            if service.bool_logging_enabled:
+                try:
+                    now = datetime.now(timezone.utc)
+                    _csv_ensure_open(service, now)
+                    row = [now.isoformat()]
+                    for buf in (_buf_gps, _buf_mag, _buf_imu, _buf_hk):
+                        row.extend(buf.values())
+                    row.append(json.dumps(_reg["registers"], sort_keys=True, separators=(",", ":")))
+                    _csv_writer.writerow(row)
+                    _csv_fh.flush()
+                    os.fsync(_csv_fh.fileno())  # durable now, not "whenever the OS gets to it"
+                    logger.debug(f"Telemetry logged: {_csv_key}")
+                except Exception:
+                    logger.exception("CSV write error")
+
+            # Sleep until rate expires OR log_rate changes
+            _log_rate_changed.clear()
+            with anyio.move_on_after(rate):
+                await _log_rate_changed.wait()
+    finally:
+        _csv_close()  # best-effort tidy-up only; durability is already guaranteed per-row above
 
 
 # ============================================================================
@@ -1589,8 +1656,10 @@ async def _emit_csv(service):
 # ============================================================================
 
 async def main(service):
-    global _gpsd_send_lock
+    global _gpsd_send_lock, _log_rate_changed, _poll_interval_changed
     _gpsd_send_lock = anyio.Lock()
+    _log_rate_changed = anyio.Event()
+    _poll_interval_changed = anyio.Event()
     will = aiomqtt.Will(
         service.topic_status,
         payload=msgspec.json.encode({"state": "offline", "seq": -1, "timestamp": time.time()}),
@@ -1617,5 +1686,5 @@ async def main(service):
 
 if __name__ == "__main__":
     logger.info("Starting afe_service")
-    service = jsonargparse.auto_cli(AfeService, env_prefix="AFE", default_env=True)
+    service = jsonargparse.auto_cli(AfeService)
     anyio.run(main, service)
