@@ -74,6 +74,6 @@ else:
 output = open(logfile,'w')
 ansible_cmd = ["/usr/bin/ansible-playbook","-e", f"actual_hostname={hostname}","-i","inventory/inventory-runtime.ini","--connection=local"] + ansible_verbosity + [file]
 if sys.stdout.isatty() or 'setup_ansible' in os.path.basename(__file__):
-  subprocess.call(ansible_cmd, env=dict(PATH='/usr/bin/:/bin:/usr/local/sbin:/usr/sbin:/sbin',HOME=homedir))
+  subprocess.call(ansible_cmd, env=dict(PATH='/usr/bin/:/bin:/usr/local/sbin:/usr/sbin:/sbin',HOME=homedir, ANSIBLE_HOST_KEY_CHECKING='False'))
 else:
-  subprocess.call(ansible_cmd, stdout=output, stderr=subprocess.STDOUT, env=dict(PATH='/usr/bin/:/bin:/usr/local/sbin:/usr/sbin:/sbin',HOME=homedir))
+  subprocess.call(ansible_cmd, stdout=output, stderr=subprocess.STDOUT, env=dict(PATH='/usr/bin/:/bin:/usr/local/sbin:/usr/sbin:/sbin',HOME=homedir, ANSIBLE_HOST_KEY_CHECKING='False'))
