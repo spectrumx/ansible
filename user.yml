@@ -26,6 +26,14 @@
         group: adm
         mode: 0775
 
+    - name: chown mep_key
+      file:
+        path: /opt/radiohound/.ssh/mep_key
+        state: file
+        owner: root
+        group: adm
+        mode: 0600
+
     - name: copy ssh key to mep
       copy:
         src: /opt/radiohound/.ssh/mep_key
