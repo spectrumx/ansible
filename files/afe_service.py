@@ -267,8 +267,13 @@ _REG_PINS  = {
 # STATE (derived from data-field tables — single source of truth)
 # ============================================================================
 
-def _make_buf(fields, extras=None):
-    buf = {"timestamp": None}
+def _make_buf(fields, extras=None, timestamps=("timestamp",)):
+    """Buffer whose key order is the authoritative CSV/JSON column order.
+
+    Parsers must .update() these, never rebind them: a replacement dict can reorder
+    keys and silently misalign every row against the import-time _CSV_HEADER.
+    """
+    buf = {k: None for k in timestamps}
     for f in fields:
         buf[f["key"]] = None
     if extras:
@@ -351,7 +356,7 @@ def _apply_register_fields(tlc, fields):
 
 # Module-level state — written by parsers, read by publishers and command handlers.
 _buf_gps = _make_buf(_DATA_FIELDS_GPS)
-_buf_imu = _make_buf(_DATA_FIELDS_IMU)
+_buf_imu = _make_buf(_DATA_FIELDS_IMU, timestamps=("acc_timestamp", "gyr_timestamp"))
 _buf_mag = _make_buf(_DATA_FIELDS_MAG)
 _buf_hk  = _make_buf(_DATA_FIELDS_HK, extras={"time_source": None, "time_epoch": None})
 
@@ -611,9 +616,12 @@ def _nmea_verify(pkt):
 
 
 def _nmea_to_epoch(t, d):
-    return int(datetime(int(d[4:6])+2000, int(d[2:4]), int(d[0:2]),
-                        int(t[0:2]), int(t[2:4]), int(t[4:6]),
-                        tzinfo=timezone.utc).timestamp())
+    """UTC epoch from NMEA time (hhmmss[.sss]) and date (ddmmyy), sub-second preserved."""
+    whole = datetime(int(d[4:6])+2000, int(d[2:4]), int(d[0:2]),
+                     int(t[0:2]), int(t[2:4]), int(t[4:6]),
+                     tzinfo=timezone.utc).timestamp()
+    frac = float(t[6:]) if len(t) > 6 and t[6] == "." else 0.0
+    return whole + frac
 
 
 def _ddmm_to_dec(ddmm, hemi):
@@ -814,7 +822,9 @@ def _parse_gnrmc(line):
     try:
         parts = line.split("*")[0].split(",")
         fix = len(parts) > 2 and parts[2] == "A"
-        u = {"fix_valid": fix, "lat": None, "lon": None,
+        # timestamp is the time *of this fix*; without a fix there isn't one, so it is
+        # cleared rather than left carrying the last good value.
+        u = {"fix_valid": fix, "timestamp": None, "lat": None, "lon": None,
              "service_timestamp": time.time()}
         if fix and len(parts) >= 10 and parts[1] and parts[9]:
             try: u["timestamp"] = _nmea_to_epoch(parts[1], parts[9])
@@ -860,13 +870,13 @@ def _parse_pmitmag(line):
 
 def _parse_pmitacc(line):
     p = line.split("*")[0].split(",")
-    return {"timestamp": int(p[1]), "acc_x": float(p[2]), "acc_y": float(p[3]),
+    return {"acc_timestamp": int(p[1]), "acc_x": float(p[2]), "acc_y": float(p[3]),
             "acc_z": float(p[4]), "service_timestamp": time.time()}
 
 
 def _parse_pmitgyr(line):
     p = line.split("*")[0].split(",")
-    return {"timestamp": int(p[1]), "gyr_x": float(p[2]), "gyr_y": float(p[3]),
+    return {"gyr_timestamp": int(p[1]), "gyr_x": float(p[2]), "gyr_y": float(p[3]),
             "gyr_z": float(p[4]), "service_timestamp": time.time()}
 
 
@@ -1027,7 +1037,7 @@ async def _dispatch_nmea(client, service, line):
             _parse_gngga(line)
             _gps_cycle_touch()
         elif line.startswith("$PMITMAG"):
-            _buf_mag = _parse_pmitmag(line)
+            _buf_mag.update(_parse_pmitmag(line))
             await client.publish(service.topic_data_mag, msgspec.json.encode(_buf_mag))
         elif line.startswith("$PMITACC"):
             _buf_imu.update(_parse_pmitacc(line))
@@ -1036,7 +1046,7 @@ async def _dispatch_nmea(client, service, line):
             _buf_imu.update(_parse_pmitgyr(line))
             await client.publish(service.topic_data_imu, msgspec.json.encode(_buf_imu))
         elif line.startswith("$PMITHK"):
-            _buf_hk = _parse_pmithk(line)
+            _buf_hk.update(_parse_pmithk(line))
             await client.publish(service.topic_data_hk, msgspec.json.encode(_buf_hk))
         elif line.startswith("$PMITSR"):
             await _handle_pmitsr(client, service, line)
@@ -1137,6 +1147,14 @@ async def _send_announce(client, service):
         "description": "Control and monitor MEP analog front-end instrument (RP2040)",
         "author": "John Marino <john.marino@colorado.edu>",
         "version": "2.0", "type": "service", "time_started": time.time(),
+        # Authoritative column order for every telemetry consumer. Derived from the
+        # live buffers, so a consumer that reads this cannot drift from what is
+        # published; data_fields alone is not sufficient (it omits the timestamps).
+        "schema": {
+            "gps": list(_buf_gps), "mag": list(_buf_mag),
+            "imu": list(_buf_imu), "hk": list(_buf_hk),
+            "registers_devices": [info["tlc"] for info in _DEVICES.values()],
+        },
         "topics": {
             "command": service.topic_command, "response": f"{service.name}/response",
             "status": service.topic_status,
@@ -1410,10 +1428,12 @@ async def _publish_gps_cycles(client, service):
     global _gps_cycle_event
     while True:
         await _gps_cycle_event.wait()
-        _gps_cycle_event = anyio.Event()
         last = None
-        while last != _gps_seq:  # a sentence landed during the wait — the cycle is still open
+        while last != _gps_seq:
             last = _gps_seq
+            # Re-arm before sleeping so signals raised during this window are consumed
+            # here; _gps_seq (not the event) is what decides whether the cycle is open.
+            _gps_cycle_event = anyio.Event()
             await anyio.sleep(_GPS_CYCLE_QUIET_S)
         try:
             await client.publish(service.topic_data_gps, msgspec.json.encode(_buf_gps))

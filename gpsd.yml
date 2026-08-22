@@ -85,6 +85,14 @@
     notify:
       - Restart chrony
 
+  # Handlers only fire on config change; without this the daemon can stay down
+  # after a failed start or a fresh boot, leaving the clock free-running.
+  - name: Ensure chrony is enabled and running
+    systemd:
+      name: chrony
+      enabled: yes
+      state: started
+
   handlers:
 
   - name: Restart chrony
