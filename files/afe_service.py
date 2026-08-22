@@ -378,7 +378,7 @@ _reg = {
 _params = {
     "imu":   {s["key"]: None for s in _IMU_MODE_SETTINGS} | {"acc_odr": None, "gyr_odr": None},
     "mag":   {k: None for k in _MAG_PARAMS},
-    "rates": {"poll_interval_s": 5},
+    "rates": {"poll_interval_s": _RATE_PARAM["default"]},
     "time":  {"time_source": None, "time_source_label": None,
               "time_epoch": None,  "time_epoch_label": None},
     "last_error": {"status": None, "tlc": None, "fields": []},
@@ -388,6 +388,14 @@ _startup_queries_sent = False
 _gpsd_send_lock = None
 _log_rate_changed = None  # Event: set when log rate changes, wakes _emit_csv
 _poll_interval_changed = None  # Event: set when poll interval changes, wakes _poll_telem
+
+# A GNSS epoch is spread over several sentences ($GNRMC, $GNGGA, ...) that arrive a few
+# ms apart and each fill in a different subset of _buf_gps. Publishing per sentence put
+# one message per sentence on the wire, each carrying a half-updated (torn) fix, so the
+# parsers only mark the cycle dirty and _publish_gps_cycles emits once the burst ends.
+_GPS_CYCLE_QUIET_S = 0.05
+_gps_seq = 0
+_gps_cycle_event = None  # Event: set on each GPS sentence, wakes _publish_gps_cycles
 
 # ============================================================================
 # DESCRIBE SCHEMAS (built from source tables — zero hand-duplicated args)
@@ -807,7 +815,7 @@ def _parse_gnrmc(line):
         parts = line.split("*")[0].split(",")
         fix = len(parts) > 2 and parts[2] == "A"
         u = {"fix_valid": fix, "lat": None, "lon": None,
-             "altitude_m": _buf_gps.get("altitude_m"), "service_timestamp": time.time()}
+             "service_timestamp": time.time()}
         if fix and len(parts) >= 10 and parts[1] and parts[9]:
             try: u["timestamp"] = _nmea_to_epoch(parts[1], parts[9])
             except ValueError: pass
@@ -833,7 +841,7 @@ def _parse_gngga(line):
     global _buf_gps
     try:
         parts = line.split("*")[0].split(",")
-        u = {"lat": _buf_gps.get("lat"), "lon": _buf_gps.get("lon"), "altitude_m": None}
+        u = {"altitude_m": None}
         for idx, key, cast in [(6, "fix_quality", int), (7, "satellites", int),
                                 (8, "hdop", float), (9, "altitude_m", float)]:
             if len(parts) > idx and parts[idx]:
@@ -1014,10 +1022,10 @@ async def _dispatch_nmea(client, service, line):
     try:
         if line.startswith("$GNRMC"):
             _parse_gnrmc(line)
-            await client.publish(service.topic_data_gps, msgspec.json.encode(_buf_gps))
+            _gps_cycle_touch()
         elif line.startswith("$GNGGA"):
             _parse_gngga(line)
-            await client.publish(service.topic_data_gps, msgspec.json.encode(_buf_gps))
+            _gps_cycle_touch()
         elif line.startswith("$PMITMAG"):
             _buf_mag = _parse_pmitmag(line)
             await client.publish(service.topic_data_mag, msgspec.json.encode(_buf_mag))
@@ -1389,6 +1397,31 @@ async def _service_telem_dump(client, service, payload):
                              {"state": "error", "message": "Command write failed", "error": str(exc)}, payload)
 
 
+def _gps_cycle_touch():
+    """Record that an NMEA sentence has just contributed fields to _buf_gps."""
+    global _gps_seq
+    _gps_seq += 1
+    if _gps_cycle_event is not None:
+        _gps_cycle_event.set()
+
+
+async def _publish_gps_cycles(client, service):
+    """Publish _buf_gps once per NMEA cycle, after its sentence burst goes quiet."""
+    global _gps_cycle_event
+    while True:
+        await _gps_cycle_event.wait()
+        _gps_cycle_event = anyio.Event()
+        last = None
+        while last != _gps_seq:  # a sentence landed during the wait — the cycle is still open
+            last = _gps_seq
+            await anyio.sleep(_GPS_CYCLE_QUIET_S)
+        try:
+            await client.publish(service.topic_data_gps, msgspec.json.encode(_buf_gps))
+        except Exception as exc:
+            await _pub_event(client, service, "error",
+                             {"type": "gps_publish_error", "message": str(exc)})
+
+
 async def _poll_telem(client, service):
     global _poll_interval_changed
     while True:
@@ -1658,10 +1691,11 @@ async def _emit_csv(service):
 # ============================================================================
 
 async def main(service):
-    global _gpsd_send_lock, _log_rate_changed, _poll_interval_changed
+    global _gpsd_send_lock, _log_rate_changed, _poll_interval_changed, _gps_cycle_event
     _gpsd_send_lock = anyio.Lock()
     _log_rate_changed = anyio.Event()
     _poll_interval_changed = anyio.Event()
+    _gps_cycle_event = anyio.Event()
     will = aiomqtt.Will(
         service.topic_status,
         payload=msgspec.json.encode({"state": "offline", "seq": -1, "timestamp": time.time()}),
@@ -1679,6 +1713,7 @@ async def main(service):
                     async with anyio.create_task_group() as tg:
                         tg.start_soon(_monitor_gpsd, client, service)
                         tg.start_soon(_process_commands, client, service)
+                        tg.start_soon(_publish_gps_cycles, client, service)
                         tg.start_soon(_poll_telem, client, service)
                         tg.start_soon(_emit_csv, service)
         except aiomqtt.MqttError:
