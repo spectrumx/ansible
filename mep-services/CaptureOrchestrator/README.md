@@ -8,7 +8,6 @@ All interaction with those independent services is through MQTT.
 ## Files
 
 - `capture_orchestrator.py` - workflow policy and MQTT coordination
-- `capture_orchestrator.yaml` - example reusable master configuration
 - `capture-orchestrator.service` - systemd unit
 
 ## MQTT topics
@@ -107,7 +106,7 @@ The direct request interface remains available. For example, a request can
 provide only `freq_start_hz` and use the staged RX channel and sample rate.
 
 ```json
-{"task_name":"load_config","arguments":{"path":"/etc/mep/capture_orchestrator.yaml"}}
+{"task_name":"load_config","arguments":{"path":"/data/captures/example/capture_settings.json"}}
 ```
 
 ```json
