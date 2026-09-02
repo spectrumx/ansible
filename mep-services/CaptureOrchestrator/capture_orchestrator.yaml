@@ -1,0 +1,12 @@
+document:
+  type: mep_capture_settings
+  version: 1
+input:
+  receive:
+    rfsoc_channel: A
+    adc_sample_rate_mhz: 10
+    conjugate_policy: auto
+    external_tuner:
+      enabled: false
+  recorder:
+    overrides: {}

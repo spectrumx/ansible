@@ -1,0 +1,16 @@
+# DigitalRF ringbuffer instances managed by ringbuffer.py.
+# duration_ms is the maximum per-channel time span in milliseconds.
+# A positive size is a fixed total byte limit; a negative size reserves that
+# many bytes of free filesystem space instead of imposing a fixed data limit.
+ringbuffers:
+  preview:
+    path: /data/captures/preview
+    enabled: true
+    size: 20000000000  # 20 GB (decimal)
+    count: null
+    duration_ms: null
+    verbose: true
+    dryrun: false
+    include_drf: true
+    include_dmd: true
+    force_polling: false

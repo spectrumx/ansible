@@ -1,0 +1,8 @@
+# UploadManager service configuration.
+data_root: /data/captures
+database_path: /data/upload_manager/state.sqlite3
+status_interval_s: 10
+activity_limit_per_job: 500
+sds:
+  host: sds.crc.nd.edu
+  api_key_environment: SDS_SECRET_TOKEN

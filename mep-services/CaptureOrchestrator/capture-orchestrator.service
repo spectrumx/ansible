@@ -1,0 +1,16 @@
+[Unit]
+Description=Capture Orchestrator Service
+After=network.target mosquitto.service
+Wants=mosquitto.service
+
+[Service]
+Type=simple
+ExecStart=/opt/radioconda/bin/python -B /opt/mep-services/CaptureOrchestrator/capture_orchestrator.py
+User=mep
+Group=mep
+Environment=PYTHONUNBUFFERED=true
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

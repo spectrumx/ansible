@@ -1,0 +1,4 @@
+# ArchiveManager service configuration.
+data_root: /data/captures
+reconcile_interval_s: 3600
+debounce_interval_s: 1
