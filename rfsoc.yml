@@ -7,7 +7,7 @@
   - name: Install mep-rfsoc-sdr Python package
     ansible.builtin.pip:
       name:
-        - https://github.com/spectrumx/mep-rfsoc-sdr/releases/download/v0.1.2/mep_rfsoc_sdr-0.1.2-py3-none-any.whl
+        - https://github.com/spectrumx/mep-rfsoc-sdr/releases/download/v0.1.3/mep_rfsoc_sdr-0.1.3-py3-none-any.whl
         - paho-mqtt
       # no-deps because have additional pynq dependency but it uses git
       # sources and reinstalls every time even if it doesn't change
