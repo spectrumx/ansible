@@ -16,31 +16,18 @@ MQTT root.
 | TunerControl | `TunerControl/src/tuner_control.py` | `tuner-control.service` | `tunercontrol/` |
 | MEPGui | `MEPGui/mep_gui.py` | none | MQTT client only |
 
-Controlled units load code from `/opt/mep-services`.
+The service source is installed at `/opt/ansible/mep-services`.
 
 ## Development service testing
 
-Preview the repository-owned unit files from the repository root:
-
-```bash
-python3 start_services.py --list
-```
-
-Link the current repository unit files into systemd and restart each service:
+Start the services from the current repository:
 
 ```bash
 python3 start_services.py
 ```
 
-The launcher discovers the repository's `.service` files, uses `systemctl link`
-so systemd reads those development definitions, reloads the systemd manager,
-and restarts every unit. ServiceManager restarts last so the SVC tab can report the
-resulting states. Units are not enabled at boot. The helper does not launch
-MEPGui or manage MQTTBroker, RecorderControl, Ansible, RFSoC, or any other
-external dependency.
-
-`systemctl restart` also starts an inactive unit, so this single command both
-brings up stopped services and reloads current Python code in running services.
+The script links the repository's unit files into systemd and restarts them.
+ServiceManager starts last.
 
 Stop every repository-owned systemd service:
 
@@ -48,8 +35,7 @@ Stop every repository-owned systemd service:
 python3 stop_services.py
 ```
 
-ServiceManager stops first, followed by each managed unit. A failure in one
-unit does not prevent the helpers from attempting the remaining units.
+ServiceManager stops first, followed by each managed unit.
 
 ## External dependencies
 

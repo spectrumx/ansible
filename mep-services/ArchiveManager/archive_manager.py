@@ -422,7 +422,10 @@ class ArchiveManagerService:
         with self._publication_lock:
             with self._state_lock:
                 name, capture = self._capture_by_id_locked(capture_id)
-                self._require_inactive_capture(capture, allow_cancelling_upload=True)
+                if capture.get("state") != "managed" or not capture.get("capture_id"):
+                    raise ValueError("legacy captures cannot be modified")
+                if capture["capture_id"] == self._active_capture_id:
+                    raise ValueError("cannot delete a capture while it is recording")
 
                 path = (self.data_root / name).resolve()
                 if path.parent != self.data_root or not path.is_dir() or path.is_symlink():
@@ -447,8 +450,6 @@ class ArchiveManagerService:
                 capture = self._inventory.get("preview")
                 if capture is None:
                     raise ValueError("preview capture not found")
-                if not self._capture_status_received:
-                    raise RuntimeError("capture activity status is not available")
                 if self._active_capture_name == "preview":
                     raise ValueError("cannot delete preview while it is recording")
 

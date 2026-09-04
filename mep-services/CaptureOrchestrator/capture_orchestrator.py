@@ -99,7 +99,7 @@ COMMANDS = {
             "center_freq_mhz": {"type": "number", "optional": True},
             "offset_freq_mhz": {"type": "number", "optional": True},
             "amplitude_bins": {"type": "integer", "optional": True},
-            "tuner": {"type": "string", "optional": True},
+            "external_tuner_enabled": {"type": "boolean", "optional": True},
             "adc_if_mhz": {"type": "number", "optional": True},
             "injection": {"type": "string", "values": ["high", "low"]},
         },
@@ -509,6 +509,8 @@ class ConfigManager:
 
     def resolve_rx(self, overrides: dict) -> dict:
         request_input, legacy_tuner = self._legacy_rx_input(overrides)
+        if legacy_tuner is not None:
+            raise ValueError("tuner selection is owned by TunerControl; use settings.receive.external_tuner.enabled")
         input_settings = self._merge(self._input, request_input)
         effective, provenance = self._resolve(input_settings, require_frequency=True)
         tuner = effective["receive"]["external_tuner"]
@@ -524,7 +526,6 @@ class ConfigManager:
             "external_tuner_enabled": tuner["enabled"],
             "adc_if_mhz": tuner["adc_if_mhz"],
             "injection": tuner["injection"],
-            "legacy_tuner": legacy_tuner,
             "recorder_overrides": effective["recorder"]["overrides"],
             "capture_settings": {
                 "document": {"type": CONFIG_TYPE, "version": CONFIG_VERSION},
@@ -554,7 +555,7 @@ class ConfigManager:
             "center_freq_mhz": transmit["center_frequency_mhz"],
             "offset_freq_mhz": transmit["offset_frequency_mhz"],
             "amplitude_bins": transmit["amplitude_bins"],
-            "tuner": overrides.get("tuner"),
+            "external_tuner_enabled": bool(overrides.get("external_tuner_enabled", False)),
             "adc_if_mhz": overrides.get("adc_if_mhz"),
             "injection": overrides.get("injection"),
         }
@@ -695,52 +696,19 @@ class MqttClient:
 
 
 class StatusTracker:
-    """Cache service status and wait for recipe postconditions."""
+    """Cache service status for workflow context and observability."""
 
     def __init__(self):
-        self._condition = threading.Condition()
+        self._lock = threading.Lock()
         self._values = {}
-        self._generations = {}
 
     def update(self, topic: str, payload: dict):
-        with self._condition:
+        with self._lock:
             self._values[topic] = payload
-            self._generations[topic] = self._generations.get(topic, 0) + 1
-            self._condition.notify_all()
 
     def latest(self, topic: str):
-        with self._condition:
+        with self._lock:
             return self._values.get(topic)
-
-    def generation(self, topic: str) -> int:
-        with self._condition:
-            return self._generations.get(topic, 0)
-
-    def wait_for(self, topic: str, predicate, timeout_s: float = STATUS_WAIT_S):
-        deadline = time.monotonic() + timeout_s
-        with self._condition:
-            while True:
-                value = self._values.get(topic)
-                if predicate(value):
-                    return value
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    return None
-                self._condition.wait(remaining)
-
-    def wait_for_new(self, topic: str, after_generation: int, predicate, timeout_s: float = STATUS_WAIT_S):
-        deadline = time.monotonic() + timeout_s
-        with self._condition:
-            while True:
-                generation = self._generations.get(topic, 0)
-                value = self._values.get(topic)
-                if generation > after_generation and predicate(value):
-                    return value
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    return None
-                self._condition.wait(remaining)
-
 
 class CaptureTelemetryLogger:
     """Write capture-scoped AFE telemetry while an RX capture is active."""
@@ -914,6 +882,53 @@ class WorkflowState:
             return dict(self._value)
 
 
+class Recorder:
+    """Configure and control RecorderControl as one workflow component."""
+
+    def __init__(self, mqtt_client: MqttClient):
+        self.mqtt = mqtt_client
+
+    def configure(self, settings, session_id=None):
+        sample_rate_mhz = int(settings["sample_rate_mhz"])
+        channel = settings["channel"]
+        capture_name = settings.get("capture_name")
+        capture_folder = capture_name or "preview"
+
+        self.stop(session_id)
+        self.mqtt.command(RECORDER_COMMAND, "config.load", {"name": f"sr{sample_rate_mhz}MHz"}, session_id)
+        self.mqtt.command(RECORDER_COMMAND, "config.set", {"key": "basic_network.dst_port", "value": str(CHANNEL_PORTS[channel])}, session_id)
+
+        if not capture_name:
+            stale_dir = PREVIEW_DATA_DIR.with_name(
+                f".preview_data_stale_{int(time.time() * 1000)}"
+            )
+            if PREVIEW_DATA_DIR.is_dir():
+                logging.info("Starting preview capture: rotating %s", PREVIEW_DATA_DIR)
+                PREVIEW_DATA_DIR.replace(stale_dir)
+            PREVIEW_DATA_DIR.mkdir(parents=True, exist_ok=True)
+            if stale_dir.is_dir():
+                shutil.rmtree(stale_dir, ignore_errors=True)
+
+        self.mqtt.command(RECORDER_COMMAND, "config.set", {"key": "drf_sink.channel_dir", "value": f"{capture_folder}/data/ch{channel}"}, session_id)
+        self.mqtt.command(RECORDER_COMMAND, "config.set", {"key": "spectrogram_output.plot_subdir", "value": f"{capture_folder}/data/ch{channel}_spectrogram_images"}, session_id)
+        for key, value in settings.get("recorder_overrides", {}).items():
+            self.mqtt.command(RECORDER_COMMAND, "config.set", {"key": key, "value": value}, session_id)
+        self.mqtt.command(
+            RECORDER_COMMAND,
+            "config.set",
+            {"key": "packet.apply_conjugate", "value": settings["apply_conjugate"]},
+            session_id,
+        )
+
+    def start(self, session_id=None):
+        self.mqtt.command(RECORDER_COMMAND, "enable", session_id=session_id)
+        self.mqtt.command(RECORDER_COMMAND, "status", session_id=session_id)
+
+    def stop(self, session_id=None):
+        self.mqtt.command(RECORDER_COMMAND, "disable", session_id=session_id)
+        self.mqtt.command(RECORDER_COMMAND, "status", session_id=session_id)
+
+
 class Rx:
     """Receive-path recipes."""
 
@@ -924,6 +939,7 @@ class Rx:
         self._stop_requested = threading.Event()
         self._sweep_thread = None
         self._sweep_lock = threading.Lock()
+        self.recorder = Recorder(mqtt_client)
         self.telemetry = CaptureTelemetryLogger(mqtt_client, statuses)
 
     def start(self, freq_start, freq_end=None, step=None, dwell=None, config=None, session_id=None):
@@ -936,11 +952,12 @@ class Rx:
     def start_single(self, frequency_hz, dwell=None, config=None, session_id=None):
         config = dict(config or {})
         self._validate_config(config)
+        self._stop_requested.clear()
         self._set_starting_state("start_rx", session_id, frequency_hz, settings=config)
         try:
-            self._configure_recorder(config, session_id)
+            self.recorder.configure(config, session_id)
             self._configure_rx_frequency(frequency_hz, config, session_id)
-            self._enable_recorder(session_id)
+            self.recorder.start(session_id)
             self._start_telemetry(config.get("capture_dir"))
             self.state.set(state="running")
             if dwell is not None:
@@ -982,9 +999,10 @@ class Rx:
     def _run_sweep(self, frequencies, dwell, settings, session_id):
         try:
             self._set_starting_state("start_rx", session_id, frequencies[0], len(frequencies), settings=settings)
-            self._configure_recorder(settings, session_id)
-            self._enable_recorder(session_id)
+            self.recorder.configure(settings, session_id)
+            self.recorder.start(session_id)
             self._start_telemetry(settings.get("capture_dir"))
+            self.state.set(state="running")
             for index, frequency_hz in enumerate(frequencies, start=1):
                 if self._stop_requested.is_set():
                     break
@@ -1005,57 +1023,13 @@ class Rx:
         self._stop_requested.set()
         self.telemetry.stop()
         try:
-            # Disable the recorder before resetting the RFSoC stream.
-            self.mqtt.command(RECORDER_COMMAND, "disable", session_id=session_id)
+            self.recorder.stop(session_id)
         finally:
             try:
-                # Reset the RFSoC receive stream.
                 self.mqtt.command(RFSOC_COMMAND, "reset", session_id=session_id)
             finally:
                 self.state.set(state="idle", operation=None, signal_path=None, capture_id=None, capture_name=None, error=None)
         return {"state": "idle"}
-
-    def _configure_recorder(self, settings, session_id):
-        sample_rate_mhz = int(settings["sample_rate_mhz"])
-        channel = settings["channel"]
-        capture_name = settings.get("capture_name")
-        capture_folder = capture_name or "preview"
-        self.mqtt.command(RECORDER_COMMAND, "disable", session_id=session_id)
-
-        # Load the service preset for the selected sample rate.
-        self.mqtt.command(RECORDER_COMMAND, "config.load", {"name": f"sr{sample_rate_mhz}MHz"}, session_id)
-
-        # Route packets to the selected recorder channel.
-        self.mqtt.command(RECORDER_COMMAND, "config.set", {"key": "basic_network.dst_port", "value": str(CHANNEL_PORTS[channel])}, session_id)
-
-        if not capture_name:
-            self._prepare_preview_data_dir()
-
-        self.mqtt.command(RECORDER_COMMAND, "config.set", {"key": "drf_sink.channel_dir", "value": f"{capture_folder}/data/ch{channel}"}, session_id)
-        self.mqtt.command(RECORDER_COMMAND, "config.set", {"key": "spectrogram_output.plot_subdir", "value": f"{capture_folder}/data/ch{channel}_spectrogram_images"}, session_id)
-
-        for key, value in settings.get("recorder_overrides", {}).items():
-            # Apply an explicit recorder override from the resolved configuration.
-            self.mqtt.command(RECORDER_COMMAND, "config.set", {"key": key, "value": value}, session_id)
-
-        self.mqtt.command(
-            RECORDER_COMMAND,
-            "config.set",
-            {"key": "packet.apply_conjugate", "value": settings["apply_conjugate"]},
-            session_id,
-        )
-
-    @staticmethod
-    def _prepare_preview_data_dir():
-        stale_dir = PREVIEW_DATA_DIR.with_name(
-            f".preview_data_stale_{int(time.time() * 1000)}"
-        )
-        if PREVIEW_DATA_DIR.is_dir():
-            logging.info("Starting preview capture: rotating %s", PREVIEW_DATA_DIR)
-            PREVIEW_DATA_DIR.replace(stale_dir)
-        PREVIEW_DATA_DIR.mkdir(parents=True, exist_ok=True)
-        if stale_dir.is_dir():
-            shutil.rmtree(stale_dir, ignore_errors=True)
 
     def _configure_rx_frequency(self, frequency_hz, settings, session_id):
         use_external_tuner = settings.get("external_tuner_enabled", False)
@@ -1085,18 +1059,7 @@ class Rx:
         self.mqtt.command(RFSOC_COMMAND, "set", f"freq_metadata {frequency_hz}", session_id)
 
         # Arm the receive path on the next PPS edge.
-        generation = self.statuses.generation(RFSOC_STATUS)
         self.mqtt.command(RFSOC_COMMAND, "capture_next_pps", session_id=session_id)
-        status = self.statuses.wait_for_new(
-            RFSOC_STATUS,
-            generation,
-            lambda value: isinstance(value, dict) and value.get("state_RX") == "active",
-        )
-        if status is None:
-            raise TimeoutError("RFSoC did not report active RX")
-
-    def _enable_recorder(self, session_id):
-        self.mqtt.command(RECORDER_COMMAND, "enable", session_id=session_id)
 
     def _start_telemetry(self, capture_dir):
         try:
@@ -1173,17 +1136,11 @@ class Tx:
             raise ValueError(f"offset_freq_mhz magnitude must be less than {TX_OFFSET_FREQ_MAX_MHZ}")
         if not 0 <= amplitude <= TX_AMPLITUDE_BINS_MAX:
             raise ValueError(f"amplitude_bins must be between 0 and {TX_AMPLITUDE_BINS_MAX}")
-        tuner = str(settings.get("tuner") or "").strip().upper() or None
-        if tuner:
-            if tuner not in TUNER_INJECTION and tuner != "AUTO":
-                raise ValueError("unsupported tuner")
-            if settings.get("adc_if_mhz") is None:
-                raise ValueError("supported tuner and adc_if_mhz are required")
-            injection = str(settings.get("injection") or TUNER_INJECTION.get(tuner, "high")).lower()
+        if settings.get("external_tuner_enabled", False):
+            injection = str(settings.get("injection") or "").lower()
+            if settings.get("adc_if_mhz") is None or injection not in {"high", "low"}:
+                raise ValueError("external tuner requires adc_if_mhz and injection")
             if_mhz = float(settings["adc_if_mhz"])
-            # Select and initialize the external tuner.
-            init_arguments = {} if tuner == "AUTO" else {"force_tuner": tuner.lower()}
-            self.mqtt.command(TUNER_COMMAND, "init_tuner", init_arguments, session_id)
 
             lo_mhz = center + (if_mhz if injection == "high" else -if_mhz)
 
@@ -1268,26 +1225,10 @@ class CaptureOrchestrator:
     def _resolve_external_tuner(self, resolved_rx: dict):
         if not resolved_rx.get("external_tuner_enabled"):
             return
-        legacy_tuner = resolved_rx.get("legacy_tuner")
-        arguments = {}
-        if legacy_tuner:
-            arguments["force_tuner"] = {"TEST": "dummy"}.get(
-                legacy_tuner, legacy_tuner.lower()
-            )
-        self.mqtt.command(TUNER_COMMAND, "init_tuner", arguments)
-        status = self.statuses.wait_for(
-            TUNER_STATUS,
-            lambda value: isinstance(value, dict)
-            and value.get("state") == "online"
-            and self._resolved_tuner_model(value),
-        )
-        if status is None:
-            raise TimeoutError("TunerControl did not report an active tuner")
+        status = self.statuses.latest(TUNER_STATUS)
         resolved_model = self._resolved_tuner_model(status)
-        if legacy_tuner and resolved_model.lower() != arguments["force_tuner"]:
-            raise RuntimeError(
-                f"TunerControl resolved {resolved_model!r}, expected {legacy_tuner!r}"
-            )
+        if resolved_model is None:
+            return
         settings = resolved_rx["capture_settings"]
         tuner = settings["effective"]["receive"]["external_tuner"]
         tuner["resolved_model"] = resolved_model
@@ -1318,6 +1259,8 @@ class CaptureOrchestrator:
 
     @staticmethod
     def _resolved_tuner_model(status):
+        if not isinstance(status, dict):
+            return None
         tuner = status.get("tuner")
         if isinstance(tuner, dict):
             return str(tuner.get("name") or "") or None

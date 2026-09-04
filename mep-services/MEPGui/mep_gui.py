@@ -37,7 +37,6 @@ from mep_client import MEPClient
 
 CHANNEL_OPTIONS = MEPClient.CHANNEL_OPTIONS
 RECORDER_CHANNEL_PORTS = MEPClient.RECORDER_CHANNEL_PORTS
-TUNER_OPTIONS = MEPClient.TUNER_OPTIONS
 CONJUGATE_POLICY_DEFAULT = MEPClient.CONJUGATE_POLICY_DEFAULT
 CONJUGATE_POLICY_OPTIONS = MEPClient.CONJUGATE_POLICY_OPTIONS
 TX_CHANNEL_OPTIONS = MEPClient.TX_CHANNEL_OPTIONS
@@ -467,7 +466,26 @@ class MEPGui:
         if not ("task_name" in data and "value" in data and "state" not in data):
             state = data.get("state", "?")
             logging.info(f"Tuner: {state}")
+        self._gui_call(self._update_tuner_selection, data)
         self._gui_call(self._refresh_status_grid)
+
+    def _update_tuner_selection(self, data: dict):
+        tuner_data = data.get("tuner") if isinstance(data, dict) else None
+        tuner_name = tuner_data.get("name") if isinstance(tuner_data, dict) else None
+        self._advertised_tuner = str(tuner_name).upper() if tuner_name else None
+
+        tuner_selection = self._vars.get("tuner_selection")
+        if tuner_selection is None:
+            return
+        tuner_enabled = tuner_selection.get() != "Disabled"
+        values = ["Disabled"]
+        if self._advertised_tuner:
+            values.append(self._advertised_tuner)
+        for tuner_combo in self._tuner_combos:
+            tuner_combo.configure(values=values)
+        tuner_selection.set(
+            self._advertised_tuner if tuner_enabled and self._advertised_tuner else "Disabled"
+        )
 
     def _on_afe_status(self, data: dict):
         state = data.get("state", "?")
@@ -1155,11 +1173,10 @@ class MEPGui:
             self._set_status_cell("afe", level, "no data", detail="No AFE status/register messages in cache")
 
         tuner_status = self.mep.tuner.get_status()
-        selected_tuner = self._vars.get("tuner", tk.StringVar(value="None")).get()
         if tuner_status:
             tuner_data = tuner_status.get("tuner")
             tuner_data = tuner_data if isinstance(tuner_data, dict) else {}
-            active_tuner = tuner_status.get("tuner_name") or selected_tuner
+            tuner_name = tuner_data.get("name") or "—"
             lo_val = self._safe_float(tuner_data.get("freq_mhz"))
             lo_txt = f"LO={lo_val:.1f}" if lo_val is not None else "LO=—"
             t_state = str(tuner_status.get("state", "unknown")).lower()
@@ -1167,11 +1184,9 @@ class MEPGui:
             self._set_status_cell(
                 "tuner",
                 level,
-                active_tuner,
-                detail=f"state={t_state}, active={active_tuner}, {lo_txt} MHz",
+                tuner_name,
+                detail=f"state={t_state}, tuner={tuner_name}, {lo_txt} MHz",
             )
-        elif str(selected_tuner).lower() == "none":
-            self._set_status_cell("tuner", "gray", "disabled", detail="Tuner selection is None")
         else:
             level = "yellow" if mqtt_ok else "red"
             self._set_status_cell("tuner", level, "no data", detail="No tuner status in cache")
@@ -1363,7 +1378,7 @@ class MEPGui:
         that need their enabled state toggled are tracked in lists so every
         instance stays in sync via _on_tuner_change.
         """
-        first_build = "tuner" not in self._vars
+        first_build = "tuner_selection" not in self._vars
 
         frame = ttk.LabelFrame(parent, text="Up/Down Convert")
         frame.grid(row=row, column=0, padx=10, pady=6, sticky="ew")
@@ -1371,37 +1386,42 @@ class MEPGui:
         frame.columnconfigure(3, weight=1)
 
         if first_build:
-            self._vars["tuner"] = tk.StringVar(value="None")
+            self._vars["tuner_selection"] = tk.StringVar(value="Disabled")
             self._vars["adc_if_mhz"] = tk.StringVar(value="1090")
             self._vars["injection_mode"] = tk.StringVar(value="High")
             self._vars["synth_lo"] = tk.StringVar(value="—")
+            self._tuner_combos = []
             self._if_entries = []
             self._injection_combos = []
 
-        # Row 0: Tuner | RFSoC IF
-        ttk.Label(frame, text="Tuner").grid(
+        ttk.Label(frame, text="External Tuner").grid(
             row=0, column=0, sticky="w", padx=5, pady=4)
-        ttk.Combobox(
-            frame, textvariable=self._vars["tuner"],
-            values=TUNER_OPTIONS, width=16, state="readonly",
-        ).grid(row=0, column=1, sticky="ew", padx=5, pady=4)
+        tuner_values = ["Disabled"]
+        advertised_tuner = getattr(self, "_advertised_tuner", None)
+        if advertised_tuner:
+            tuner_values.append(advertised_tuner)
+        tuner_combo = ttk.Combobox(
+            frame, textvariable=self._vars["tuner_selection"],
+            values=tuner_values, width=16, state="readonly",
+        )
+        tuner_combo.grid(row=0, column=1, sticky="ew", padx=5, pady=4)
+        self._tuner_combos.append(tuner_combo)
 
-        ttk.Label(frame, text="RFSoC IF (MHz)").grid(
-            row=0, column=2, sticky="w", padx=5, pady=4)
-        if_entry = ttk.Entry(
-            frame, textvariable=self._vars["adc_if_mhz"], width=16, state="disabled")
-        if_entry.grid(row=0, column=3, sticky="ew", padx=5, pady=4)
-        self._if_entries.append(if_entry)
-
-        # Row 1: Injection Mode | Synth LO
         ttk.Label(frame, text="Injection Mode").grid(
-            row=1, column=0, sticky="w", padx=5, pady=4)
+            row=0, column=2, sticky="w", padx=5, pady=4)
         injection_combo = ttk.Combobox(
             frame, textvariable=self._vars["injection_mode"],
             values=["High", "Low"], width=16, state="readonly",
         )
-        injection_combo.grid(row=1, column=1, sticky="ew", padx=5, pady=4)
+        injection_combo.grid(row=0, column=3, sticky="ew", padx=5, pady=4)
         self._injection_combos.append(injection_combo)
+
+        ttk.Label(frame, text="RFSoC IF (MHz)").grid(
+            row=1, column=0, sticky="w", padx=5, pady=4)
+        if_entry = ttk.Entry(
+            frame, textvariable=self._vars["adc_if_mhz"], width=16, state="disabled")
+        if_entry.grid(row=1, column=1, sticky="ew", padx=5, pady=4)
+        self._if_entries.append(if_entry)
 
         ttk.Label(frame, text="Synth LO (MHz)").grid(
             row=1, column=2, sticky="w", padx=5, pady=4)
@@ -1410,7 +1430,7 @@ class MEPGui:
         ).grid(row=1, column=3, sticky="ew", padx=5, pady=4)
 
         if first_build:
-            self._vars["tuner"].trace_add("write", self._on_tuner_change)
+            self._vars["tuner_selection"].trace_add("write", self._on_tuner_change)
             self._vars["freq_start"].trace_add("write", self._update_synth_lo)
             self._vars["adc_if_mhz"].trace_add("write", self._update_synth_lo)
             self._vars["injection_mode"].trace_add("write", self._update_synth_lo)
@@ -2185,9 +2205,7 @@ class MEPGui:
         ))
         capture_actionable = managed and not recording and not capture_uploading
         capture_editable = capture_actionable and data_ready
-        capture_deletable = (managed or preview) and data_ready and not recording and (
-            preview or not capture_uploading or capture_cancelling
-        )
+        capture_deletable = (managed or preview) and data_ready and not recording
         any_upload_active = any(
             job.get("state") in active_states - {"paused"}
             for job in self.upload_manager.get_uploads()
@@ -3472,186 +3490,6 @@ class MEPGui:
         )
         self._bind_copy_menu(note)
         return note
-
-    def _build_jetson_health_tab(self, frame: ttk.Frame):
-        """Jetson Health tab: low-cost host readouts (temp/power/cpu/mem)."""
-        frame.columnconfigure(0, weight=1)
-
-        def _ro_row(parent, row, label, key, default="-"):
-            sv = tk.StringVar(value=default)
-            self._vars[key] = sv
-            ttk.Label(parent, text=label).grid(
-                row=row, column=0, sticky="w", padx=5, pady=2)
-            e = ttk.Entry(parent, textvariable=sv, state="readonly", width=26)
-            e.grid(row=row, column=1, sticky="ew", padx=5, pady=2)
-            self._bind_copy_menu(e, sv)
-
-        top_f = ttk.Frame(frame)
-        top_f.grid(row=0, column=0, padx=4, pady=(4, 2), sticky="ew")
-        top_f.columnconfigure(0, weight=1)
-        top_f.columnconfigure(1, weight=1)
-
-        # ---- System ---- #
-        sys_f = ttk.LabelFrame(top_f, text="System")
-        sys_f.grid(row=0, column=0, padx=(0, 2), pady=0, sticky="nsew")
-        sys_f.columnconfigure(1, weight=1)
-        _ro_row(sys_f, 0, "CPU Usage", "jh_cpu_usage")
-        _ro_row(sys_f, 1, "Memory", "jh_ram")
-        _ro_row(sys_f, 2, "Disk Avail", "jh_disk")
-
-        poll_f = ttk.LabelFrame(top_f, text="Polling")
-        poll_f.grid(row=0, column=1, padx=(2, 0), pady=0, sticky="nsew")
-        poll_f.columnconfigure(0, weight=1)
-        self._vars["jh_auto_refresh"] = tk.BooleanVar(value=True)
-        ttk.Checkbutton(
-            poll_f,
-            text="Auto-refresh (1s, active tab only)",
-            variable=self._vars["jh_auto_refresh"],
-        ).grid(row=0, column=0, sticky="w", padx=6, pady=(8, 4))
-        ttk.Button(poll_f, text="Refresh now", command=self._jetson_health_refresh_now).grid(
-            row=1, column=0, sticky="ew", padx=6, pady=(4, 8)
-        )
-
-        # ---- Network ---- #
-        net_f = ttk.LabelFrame(frame, text="Network")
-        net_f.grid(row=1, column=0, padx=4, pady=(2, 2), sticky="ew")
-        net_f.columnconfigure(1, weight=1)
-        _ro_row(net_f, 0, "Status", "jh_net_status")
-        _ro_row(net_f, 1, "MAC", "jh_net_mac")
-        _ro_row(net_f, 2, "IP", "jh_net_ip")
-        self._vars["jh_net_reason"] = tk.StringVar(value="")
-        ttk.Label(
-            net_f,
-            textvariable=self._vars["jh_net_reason"],
-            foreground="grey",
-            font=("TkDefaultFont", 8),
-            wraplength=380,
-            justify="left",
-        ).grid(row=3, column=0, columnspan=2, sticky="w", padx=5, pady=(0, 2))
-
-        services_f = ttk.LabelFrame(frame, text="Capture Services")
-        services_f.grid(row=2, column=0, padx=4, pady=(2, 2), sticky="ew")
-        services_f.columnconfigure(1, weight=1)
-        _ro_row(services_f, 0, "Orchestrator", "jh_capture_orchestrator")
-        _ro_row(services_f, 1, "Archive Manager", "jh_archive_manager")
-        _ro_row(services_f, 2, "Upload Manager", "jh_upload_manager")
-
-        # ---- Power Mode ---- #
-        pm_f = ttk.LabelFrame(frame, text="Power Mode")
-        pm_f.grid(row=3, column=0, padx=4, pady=(2, 2), sticky="ew")
-        pm_f.columnconfigure(1, weight=1)
-        _ro_row(pm_f, 0, "Current", "jh_nvpmodel")
-
-        self._vars["jh_nvpmodel_conf_path"] = tk.StringVar(value="/etc/nvpmodel.conf")
-        ttk.Label(pm_f, text="Config File").grid(
-            row=1, column=0, sticky="w", padx=5, pady=2)
-        conf_e = ttk.Entry(
-            pm_f,
-            textvariable=self._vars["jh_nvpmodel_conf_path"],
-            width=26,
-            state="readonly",
-        )
-        conf_e.grid(row=1, column=1, sticky="ew", padx=5, pady=2)
-        self._bind_copy_menu(conf_e, self._vars["jh_nvpmodel_conf_path"])
-
-        mode_f = ttk.Frame(pm_f)
-        mode_f.grid(row=2, column=0, columnspan=2, sticky="ew", padx=5, pady=(2, 4))
-        mode_f.columnconfigure(1, weight=1)
-        ttk.Label(mode_f, text="Select").grid(
-            row=0, column=0, sticky="w", pady=2)
-        mode_choices = self._jetson_nvpmodel_choice_values()
-        initial_choice = self._jetson_nvpmodel_choice_for_id(self._jetson_nvpmodel_default_id)
-        if not initial_choice and mode_choices:
-            initial_choice = mode_choices[0]
-        self._vars["jh_nvpmodel_select"] = tk.StringVar(value=initial_choice or "")
-        mode_combo = ttk.Combobox(
-            mode_f,
-            textvariable=self._vars["jh_nvpmodel_select"],
-            values=mode_choices,
-            state="readonly",
-            width=18,
-        )
-        mode_combo.grid(row=0, column=1, sticky="ew", padx=5, pady=2)
-        self._bind_copy_menu(mode_combo)
-        ttk.Button(mode_f, text="Set (required reboot!)",
-                   command=self._jetson_health_apply_nvpmodel).grid(
-            row=0, column=2, padx=(0, 2), pady=2)
-
-        # ---- Thermal ---- #
-        th_f = ttk.LabelFrame(frame, text="Thermal")
-        th_f.grid(row=4, column=0, padx=4, pady=(2, 2), sticky="ew")
-        th_f.columnconfigure(0, weight=1)
-        th_f.columnconfigure(1, weight=1)
-        for i in range(1, 7):
-            name_key = f"jh_temp_name_{i}"
-            val_key = f"jh_temp_val_{i}"
-            name_sv = tk.StringVar(value=f"Temp {i}")
-            self._vars[name_key] = name_sv
-            self._vars[val_key] = tk.StringVar(value="-")
-            cell = ttk.Frame(th_f)
-            r = (i - 1) // 2
-            c = (i - 1) % 2
-            cell.grid(row=r, column=c, sticky="ew", padx=5, pady=2)
-            cell.columnconfigure(1, weight=1)
-            ttk.Label(cell, textvariable=name_sv).grid(row=0, column=0, sticky="w", padx=(0, 4))
-            e = ttk.Entry(cell, textvariable=self._vars[val_key], state="readonly", width=16)
-            e.grid(row=0, column=1, sticky="ew")
-            self._bind_copy_menu(e, self._vars[val_key])
-        self._vars["jh_thermal_reason"] = tk.StringVar(value="")
-        ttk.Label(
-            th_f,
-            textvariable=self._vars["jh_thermal_reason"],
-            foreground="grey",
-            font=("TkDefaultFont", 8),
-            wraplength=380,
-            justify="left",
-        ).grid(row=3, column=0, columnspan=2, sticky="w", padx=5, pady=(0, 2))
-
-        # ---- Power ---- #
-        pw_f = ttk.LabelFrame(frame, text="Power")
-        pw_f.grid(row=5, column=0, padx=4, pady=(2, 2), sticky="ew")
-        pw_f.columnconfigure(1, weight=1)
-        for i in range(1, 4):
-            name_key = f"jh_pwr_name_{i}"
-            val_key = f"jh_pwr_val_{i}"
-            name_sv = tk.StringVar(value=self._jetson_health_state.get(name_key, f"Rail {i}"))
-            self._vars[name_key] = name_sv
-            self._vars[val_key] = tk.StringVar(value=self._jetson_health_state.get(val_key, "-"))
-            ttk.Label(pw_f, textvariable=name_sv).grid(
-                row=i - 1, column=0, sticky="w", padx=5, pady=2)
-            e = ttk.Entry(pw_f, textvariable=self._vars[val_key], state="readonly", width=24)
-            e.grid(row=i - 1, column=1, sticky="ew", padx=5, pady=2)
-            self._bind_copy_menu(e, self._vars[val_key])
-
-        self._vars["jh_tegrastats_last"] = tk.StringVar(
-            value="Last queried: never"
-        )
-        ttk.Label(
-            pw_f,
-            textvariable=self._vars["jh_tegrastats_last"],
-            foreground="grey",
-            font=("TkDefaultFont", 8),
-        ).grid(row=3, column=0, columnspan=2, sticky="w", padx=5, pady=(4, 0))
-
-        ttk.Button(pw_f, text="Query tegrastats",
-                   command=self._jetson_health_poll_tegrastats).grid(
-            row=4, column=0, columnspan=2, padx=5, pady=(4, 2), sticky="ew")
-
-        self._add_copyable_note(
-            frame,
-            "System rows are supplied by HostManager. Applying a new mode may require root or passwordless sudo. Power rows update only when Query tegrastats is pressed.",
-            row=7,
-            wraplength=420,
-        )
-        self._vars["jh_host_metrics_status"] = tk.StringVar(value="")
-        ttk.Label(
-            frame,
-            textvariable=self._vars["jh_host_metrics_status"],
-            foreground="grey",
-            font=("TkDefaultFont", 8),
-        ).grid(row=6, column=0, sticky="w", padx=4, pady=(0, 2))
-        self._jetson_service_status_apply()
-        self.root.after(250, self._jetson_health_sync_nvpmodel_choice)
 
     def _jetson_health_set(self, key: str, value):
         val = "-" if value is None else str(value)
@@ -6950,6 +6788,7 @@ class MEPGui:
             wrap="word",
             font=("TkFixedFont", 9),
             background="#f5f5f5",
+            exportselection=False,
         )
         self._docker_log_text.tag_configure("docker_ts", foreground="#6b7280")
         self._docker_log_text.tag_configure("docker_svc", foreground="#1d4ed8")
@@ -6964,7 +6803,7 @@ class MEPGui:
             "<Key>",
             lambda e: None if (e.state & 0x4 and e.keysym in ("c", "C", "a", "A")) else "break",
         )
-        self._bind_copy_menu(self._docker_log_text)
+        self._bind_copy_menu(self._docker_log_text, allow_paste=False)
 
         self._add_copyable_note(
             frame,
@@ -7186,14 +7025,14 @@ class MEPGui:
             logging.error("TX: invalid staged value; start/update aborted")
             return
         channel = self._vars["tx_channel"].get().strip()
-        tuner, adc_if_mhz, injection = self._parse_tuner_params()
+        tuner_enabled, adc_if_mhz, injection = self._parse_tuner_params()
         self._vars["tx_st_transmitting"].set("Requesting start...")
         self.capture_orchestrator.start_tx(
             channel=channel,
             center_freq_mhz=center_mhz,
             offset_freq_mhz=offset_mhz,
             amplitude_bins=amplitude,
-            tuner=tuner,
+            external_tuner_enabled=tuner_enabled,
             adc_if_mhz=adc_if_mhz,
             injection=injection,
             callback=lambda response: self._gui_call(self._handle_workflow_response, "TX", response),
@@ -7234,7 +7073,7 @@ class MEPGui:
             tuner_data = status.get("tuner")
             tuner_data = tuner_data if isinstance(tuner_data, dict) else {}
             self._vars["tun_state"].set(str(status.get("state", "—")))
-            name_val = status.get("tuner_name", "—")
+            name_val = tuner_data.get("name", "—")
             self._vars["tun_name"].set(str(name_val) if name_val else "—")
 
             freq_val = self._safe_float(tuner_data.get("freq_mhz"))
@@ -7322,10 +7161,8 @@ class MEPGui:
             logging.info(f"TUN: lock status = {self._vars['tun_lock_status'].get()}")
 
     def _tun_init(self):
-        tuner = self._vars["tuner"].get()
-        force = None if tuner in ("None", "auto") else tuner
-        self.mep.tuner.initialize(force_tuner=force)
-        logging.info(f"TUN: init_tuner sent ({tuner})")
+        self.mep.tuner.initialize()
+        logging.info("TUN: automatic init_tuner sent")
 
     def _tun_set_freq(self):
         try:
@@ -7697,7 +7534,7 @@ class MEPGui:
     # ------------------------------------------------------------------ #
 
     def _on_tuner_change(self, *_):
-        tuner_enabled = self._vars["tuner"].get() != "None"
+        tuner_enabled = self._vars["tuner_selection"].get() != "Disabled"
         state = "normal" if tuner_enabled else "disabled"
         for if_entry in self._if_entries:
             if_entry.configure(state=state)
@@ -7706,7 +7543,7 @@ class MEPGui:
         self._update_synth_lo()
 
     def _update_synth_lo(self, *_):
-        if self._vars["tuner"].get() == "None":
+        if self._vars["tuner_selection"].get() == "Disabled":
             self._vars["synth_lo"].set("—")
             return
         try:
@@ -7788,18 +7625,17 @@ class MEPGui:
     # ------------------------------------------------------------------ #
 
     def _parse_tuner_params(self) -> tuple:
-        """Return (tuner, adc_if_mhz, injection) from the shared Up/Down Convert vars."""
-        tuner_str = self._vars["tuner"].get()
-        tuner = None if tuner_str == "None" else tuner_str
+        """Return (enabled, adc_if_mhz, injection) from the shared tuner controls."""
+        tuner_enabled = self._vars["tuner_selection"].get() != "Disabled"
         adc_if_s = self._vars["adc_if_mhz"].get().strip()
-        adc_if_mhz = float(adc_if_s) if (adc_if_s and tuner) else None
+        adc_if_mhz = float(adc_if_s) if (adc_if_s and tuner_enabled) else None
         injection = self._vars["injection_mode"].get().lower()
-        return tuner, adc_if_mhz, injection
+        return tuner_enabled, adc_if_mhz, injection
 
     def _parse_single_params(self) -> dict:
         freq_start = float(self._vars["freq_start"].get())
         channel    = self._vars["channel"].get()
-        tuner, adc_if_mhz, injection = self._parse_tuner_params()
+        tuner_enabled, adc_if_mhz, injection = self._parse_tuner_params()
 
         capture_name_s = self._vars["capture_name"].get().strip()
         capture_name   = capture_name_s if capture_name_s else None
@@ -7819,7 +7655,7 @@ class MEPGui:
         return {
             "freq_start":       freq_start,
             "channel":          channel,
-            "tuner":            tuner,
+            "tuner_enabled":    tuner_enabled,
             "adc_if_mhz":       adc_if_mhz,
             "capture_name":     capture_name,
             "sample_rate_mhz":  sample_rate_mhz,
@@ -7835,7 +7671,7 @@ class MEPGui:
         dwell      = float(self._vars["dwell"].get())
 
         channel    = self._vars["channel"].get()
-        tuner, adc_if_mhz, injection = self._parse_tuner_params()
+        tuner_enabled, adc_if_mhz, injection = self._parse_tuner_params()
 
         capture_name_s = self._vars["capture_name"].get().strip()
         capture_name   = capture_name_s if capture_name_s else None
@@ -7848,7 +7684,7 @@ class MEPGui:
             "step":             step,
             "dwell":            dwell,
             "channel":          channel,
-            "tuner":            tuner,
+            "tuner_enabled":    tuner_enabled,
             "adc_if_mhz":       adc_if_mhz,
             "capture_name":     capture_name,
             "sample_rate_mhz":  sample_rate_mhz,
@@ -7860,7 +7696,7 @@ class MEPGui:
     # ------------------------------------------------------------------ #
 
     def _orchestrator_rx_settings(self, params: dict, *, sweep: bool) -> dict:
-        tuner_enabled = params["tuner"] is not None
+        tuner_enabled = params["tuner_enabled"]
         acquisition = {
             "mode": "sweep" if sweep else "single",
             "rf_frequency_hz": int(params["freq_start"] * 1e6),

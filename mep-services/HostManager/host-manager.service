@@ -5,7 +5,7 @@ Wants=mosquitto.service
 
 [Service]
 Type=simple
-ExecStart=/opt/radioconda/bin/python -B /opt/mep-services/HostManager/host-manager.py
+ExecStart=/opt/radioconda/bin/python -B /opt/ansible/mep-services/HostManager/host-manager.py
 Environment=PYTHONUNBUFFERED=true
 Restart=always
 RestartSec=10

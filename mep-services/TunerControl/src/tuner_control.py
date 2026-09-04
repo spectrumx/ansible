@@ -234,7 +234,6 @@ async def send_status(client, service):
     }
     if service.tuner is not None:
         payload["state"] = "online" if service.ready else "error"
-        payload["tuner_name"] = service.tuner.name
         payload["tuner"] = dataclasses.asdict(service.tuner)
     json_payload = msgspec.json.encode(payload)
     logger.debug(

@@ -7,7 +7,7 @@ After=gpsd.service
 
 [Service]
 Type=exec
-ExecStart=/opt/radioconda/bin/python /opt/mep-services/AFEControl/afe_control.py
+ExecStart=/opt/radioconda/bin/python /opt/ansible/mep-services/AFEControl/afe_control.py
 User=mep
 Group=mep
 Restart=always

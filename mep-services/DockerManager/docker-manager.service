@@ -6,7 +6,7 @@ StartLimitBurst=60
 
 [Service]
 Type=simple
-ExecStart=/opt/radioconda/bin/python -B /opt/mep-services/DockerManager/docker_manager.py
+ExecStart=/opt/radioconda/bin/python -B /opt/ansible/mep-services/DockerManager/docker_manager.py
 Environment=CI=true
 Restart=always
 RestartSec=10
