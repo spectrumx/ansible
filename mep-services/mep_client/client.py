@@ -123,17 +123,17 @@ class ArchiveClient(ComponentClient):
                 callback(response)
         return self.request("get_captures", callback=complete)
 
-    def get_capture(self, capture_id: str, callback=None):
-        return self.request("get_capture", {"capture_id": capture_id}, callback=callback)
+    def get_capture(self, capture_name: str, callback=None):
+        return self.request("get_capture", {"capture_name": capture_name}, callback=callback)
 
-    def delete_capture(self, capture_id: str, callback=None):
-        return self.request("delete_capture", {"capture_id": capture_id}, callback=callback)
+    def delete_capture(self, capture_name: str, callback=None):
+        return self.request("delete_capture", {"capture_name": capture_name}, callback=callback)
 
     def delete_preview(self, callback=None):
         return self.request("delete_preview", callback=callback)
 
-    def rename_capture(self, capture_id: str, new_name: str, callback=None):
-        return self.request("rename_capture", {"capture_id": capture_id, "new_name": new_name}, callback=callback)
+    def rename_capture(self, capture_name: str, new_name: str, callback=None):
+        return self.request("rename_capture", {"capture_name": capture_name, "new_name": new_name}, callback=callback)
 
 
 class UploadClient(ComponentClient):
@@ -141,7 +141,6 @@ class UploadClient(ComponentClient):
         self._uploads = []
         self._sds_checks = []
         super().__init__(message_bus, "uploadmanager", bus.UPLOAD_MANAGER_STATUS_TOPIC, bus.UPLOAD_MANAGER_COMMAND_TOPIC, bus.UPLOAD_MANAGER_RESPONSE_TOPIC)
-        message_bus.on_status(bus.UPLOAD_MANAGER_EVENT_TOPIC, self._on_event)
 
     def _on_status(self, payload: dict):
         uploads = ArchiveClient.extract_list(payload, "uploads")
@@ -151,26 +150,17 @@ class UploadClient(ComponentClient):
         if checks is not None:
             self._sds_checks = checks
 
-    def _on_event(self, payload: dict):
-        if not isinstance(payload, dict) or payload.get("event_type") != "upload_activity":
-            return
-        status = payload.get("status_data")
-        activity = status.get("activity") if isinstance(status, dict) else None
-        job_id = str(status.get("job_id") or "") if isinstance(status, dict) else ""
-        revision = activity.get("activity_id") if isinstance(activity, dict) else None
-        for upload in self._uploads:
-            if isinstance(upload, dict) and str(upload.get("job_id") or "") == job_id:
-                upload["activity_revision"] = revision
-                break
-
     def get_uploads(self):
         return [dict(upload) for upload in self._uploads if isinstance(upload, dict)]
 
     def on_activity(self, callback):
         self.bus.on_status(bus.UPLOAD_MANAGER_EVENT_TOPIC, callback)
 
-    def get_sds_check(self, capture_id: str):
-        return next((dict(check) for check in self._sds_checks if isinstance(check, dict) and str(check.get("capture_id") or "") == str(capture_id)), {})
+    def get_sds_check(self, capture_name: str):
+        return next((dict(check) for check in self._sds_checks if isinstance(check, dict) and str(check.get("capture_name") or "") == str(capture_name)), {})
+
+    def get_activity(self, capture_name: str, callback=None):
+        return self.request("get_activity", {"capture_name": capture_name}, callback=callback)
 
     def refresh(self, callback=None):
         def complete(response):
@@ -181,43 +171,20 @@ class UploadClient(ComponentClient):
                 callback(response)
         return self.request("get_uploads", callback=complete)
 
-    def get_upload_activity(self, job_id: str, *, limit: int = 100, callback=None):
-        return self.request("get_upload_activity", {"job_id": job_id, "limit": int(limit)}, callback=callback)
-
-    def start_upload(self, capture_id: str, *, destination="sds", credentials=None, dry_run=False, callback=None):
-        arguments = {"capture_id": capture_id, "destination": destination, "dry_run": bool(dry_run)}
+    def start_upload(self, capture_name: str, *, credentials=None, dry_run=False, verbose=True, callback=None):
+        arguments = {"capture_name": capture_name, "dry_run": bool(dry_run), "verbose": bool(verbose)}
         if isinstance(credentials, dict):
             arguments["credentials"] = credentials
         return self.request("start_upload", arguments, callback=callback)
 
-    def check_sds(self, capture_id: str, *, credentials=None, callback=None):
-        arguments = {"capture_id": capture_id}
+    def check_sds(self, capture_name: str, *, credentials=None, callback=None):
+        arguments = {"capture_name": capture_name}
         if isinstance(credentials, dict):
             arguments["credentials"] = credentials
         return self.request("check_sds", arguments, callback=callback)
 
-    def pause_upload(self, job_id: str, callback=None):
-        return self.request("pause_upload", {"job_id": job_id}, callback=callback)
-
-    def resume_upload(self, job_id: str, *, credentials=None, callback=None):
-        arguments = {"job_id": job_id}
-        if isinstance(credentials, dict):
-            arguments["credentials"] = credentials
-        return self.request("resume_upload", arguments, callback=callback)
-
-    def retry_upload(self, job_id: str, *, credentials=None, dry_run=None, callback=None):
-        arguments = {"job_id": job_id}
-        if isinstance(credentials, dict):
-            arguments["credentials"] = credentials
-        if dry_run is not None:
-            arguments["dry_run"] = bool(dry_run)
-        return self.request("retry_upload", arguments, callback=callback)
-
-    def cancel_upload(self, job_id: str, callback=None):
-        return self.request("stop_upload", {"job_id": job_id}, callback=callback)
-
-    def delete_upload(self, job_id: str, callback=None):
-        return self.request("delete_upload", {"job_id": job_id}, callback=callback)
+    def stop_upload(self, capture_name: str, callback=None):
+        return self.request("stop_upload", {"capture_name": capture_name}, callback=callback)
 
 
 class HostClient(ComponentClient):

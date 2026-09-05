@@ -396,9 +396,11 @@ class MEPGui:
         # ---- Startup sequence with intentional delays ----
         self.root.after(20, self._pump_gui_queue)
         self.root.after(50, self._pump_text_log)
+        self.root.after(100, self._rec_request_presets)
 
     def _init_shared_vars(self):
         """Initialize cross-tab state once, independent of lazy tab construction."""
+        self._rec_presets_loaded = False
         self._vars["time_source"] = tk.StringVar(value="")
         self._vars["epoch_mode"] = tk.StringVar(value="")
         # Blank/0 until the service reports the real value — never guess.
@@ -449,6 +451,8 @@ class MEPGui:
         self._gui_call(self._refresh_status_grid)
         if status.get("connected"):
             self._gui_call(self._rec_request_presets)
+            self.archive_manager.refresh()
+            self.upload_manager.refresh()
 
     def _on_recorder_status(self, data: dict):
         state = data.get("state", "—")
@@ -1552,13 +1556,8 @@ class MEPGui:
     def _cap_apply_service_status(self, data: dict):
         if not isinstance(data, dict):
             return
-        self._cap_status_data = data
-        if hasattr(self, "_cap_tree") and not getattr(self, "_cap_render_after_id", None):
-            self._cap_render_after_id = self.root.after(150, self._cap_perform_render)
-
-    def _cap_perform_render(self):
-        self._cap_render_after_id = None
-        self._render_cap_tab()
+        if hasattr(self, "_cap_tree"):
+            self._render_cap_tab()
 
     @staticmethod
     def _vertical_scroll_tab(frame: ttk.Frame) -> ttk.Frame:
@@ -1585,6 +1584,8 @@ class MEPGui:
     def _apply_orchestrator_status(self, data: dict):
         if not isinstance(data, dict):
             return
+        if not self._rec_presets_loaded:
+            self._rec_request_presets()
         rx = data.get("rx") if isinstance(data.get("rx"), dict) else {}
         tx = data.get("tx") if isinstance(data.get("tx"), dict) else {}
         apply_conjugate = rx.get("apply_conjugate")
@@ -1645,713 +1646,402 @@ class MEPGui:
             logging.warning("SVC: %s", error)
 
     def _build_cap_tab(self, frame: ttk.Frame):
-        frame = self._vertical_scroll_tab(frame)
         frame.columnconfigure(0, weight=1)
-        frame.rowconfigure(1, weight=2)
-        frame.rowconfigure(3, weight=1)
-
-        toolbar = ttk.Frame(frame)
-        toolbar.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 6))
-        toolbar.columnconfigure(0, weight=1)
-
-        self._cap_status_var = tk.StringVar(value="waiting for retained status")
-        ttk.Label(toolbar, textvariable=self._cap_status_var, foreground="darkblue").grid(row=0, column=0, sticky="w", padx=4)
-        ttk.Button(toolbar, text="Refresh", command=self._refresh_cap_tab).grid(row=0, column=1, sticky="e", padx=4)
+        frame.rowconfigure(0, weight=1)
+        frame.rowconfigure(3, weight=2)
 
         captures_frame = ttk.LabelFrame(frame, text="Captures")
-        captures_frame.grid(row=1, column=0, sticky="nsew", padx=4, pady=(0, 4))
+        captures_frame.grid(row=0, column=0, sticky="nsew", padx=4, pady=(4, 4))
         captures_frame.columnconfigure(0, weight=1)
         captures_frame.rowconfigure(0, weight=1)
         tree = ttk.Treeview(
             captures_frame,
-            columns=("name", "state", "bytes", "files", "modified", "recording", "upload"),
+            columns=("name", "bytes", "files", "upload"),
             show="headings",
-            height=12,
+            height=10,
         )
         tree.grid(row=0, column=0, sticky="nsew")
         capture_scrollbar = ttk.Scrollbar(captures_frame, orient="vertical", command=tree.yview)
         capture_scrollbar.grid(row=0, column=1, sticky="ns")
-        capture_x_scrollbar = ttk.Scrollbar(captures_frame, orient="horizontal", command=tree.xview)
-        capture_x_scrollbar.grid(row=1, column=0, sticky="ew")
-        tree.configure(
-            yscrollcommand=capture_scrollbar.set,
-            xscrollcommand=capture_x_scrollbar.set,
-        )
+        tree.configure(yscrollcommand=capture_scrollbar.set)
         tree.heading("name", text="Capture")
-        tree.heading("state", text="State")
         tree.heading("bytes", text="Size")
         tree.heading("files", text="Files")
-        tree.heading("modified", text="Modified")
-        tree.heading("recording", text="Recording")
-        tree.heading("upload", text="Upload")
-        tree.column("name", width=145, anchor="w")
-        tree.column("state", width=65, anchor="center")
+        tree.heading("upload", text="SDS")
+        tree.column("name", width=240, minwidth=120, anchor="w", stretch=True)
         tree.column("bytes", width=75, anchor="e")
-        tree.column("files", width=45, anchor="e")
-        tree.column("modified", width=125, anchor="w")
-        tree.column("recording", width=75, anchor="center")
-        tree.column("upload", width=110, anchor="w")
+        tree.column("files", width=52, anchor="e")
+        tree.column("upload", width=105, anchor="w")
         self._cap_tree = tree
         self._cap_capture_by_iid = {}
-        self._cap_render_after_id = None
-        self._cap_last_render_signature = None
+        self._cap_activity_by_capture = {}
+        self._cap_details_capture_name = None
         tree.bind("<<TreeviewSelect>>", self._cap_selection_changed)
 
         detail = ttk.LabelFrame(frame, text="Selected Capture")
-        detail.grid(row=2, column=0, sticky="ew", padx=4, pady=(0, 4))
-        detail.columnconfigure(0, weight=1)
-        self._cap_detail_text = scrolledtext.ScrolledText(detail, height=9, wrap="word", state="disabled", font=("TkFixedFont", 8))
-        self._cap_detail_text.grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 3))
-        self._cap_detail_signature = None
-        self._bind_copy_menu(self._cap_detail_text, allow_paste=False)
-
-        capture_actions = ttk.Frame(detail)
-        capture_actions.grid(row=1, column=0, sticky="ew", padx=6, pady=(3, 6))
-        capture_actions.columnconfigure(1, weight=1)
+        detail.grid(row=1, column=0, sticky="ew", padx=4, pady=(0, 4))
+        detail.columnconfigure(1, weight=1)
+        detail.columnconfigure(3, weight=1)
         self._cap_rename_var = tk.StringVar()
-        ttk.Label(capture_actions, text="Name").grid(row=0, column=0, sticky="w")
-        ttk.Entry(capture_actions, textvariable=self._cap_rename_var).grid(row=0, column=1, sticky="ew", padx=4)
+        self._cap_size_var = tk.StringVar(value="-")
+        self._cap_files_var = tk.StringVar(value="-")
+        self._cap_modified_var = tk.StringVar(value="-")
+        self._cap_recording_var = tk.StringVar(value="No")
+        ttk.Label(detail, text="Name").grid(row=0, column=0, sticky="w", padx=(6, 2), pady=(6, 3))
+        ttk.Entry(detail, textvariable=self._cap_rename_var).grid(row=0, column=1, columnspan=3, sticky="ew", padx=(2, 6), pady=(6, 3))
+        ttk.Label(detail, text="Size").grid(row=1, column=0, sticky="w", padx=(6, 2), pady=2)
+        ttk.Label(detail, textvariable=self._cap_size_var).grid(row=1, column=1, sticky="w", padx=2, pady=2)
+        ttk.Label(detail, text="Files").grid(row=1, column=2, sticky="w", padx=(12, 2), pady=2)
+        ttk.Label(detail, textvariable=self._cap_files_var).grid(row=1, column=3, sticky="w", padx=2, pady=2)
+        ttk.Label(detail, text="Modified").grid(row=2, column=0, sticky="w", padx=(6, 2), pady=2)
+        ttk.Label(detail, textvariable=self._cap_modified_var).grid(row=2, column=1, sticky="w", padx=2, pady=2)
+        ttk.Label(detail, text="Recording").grid(row=2, column=2, sticky="w", padx=(12, 2), pady=2)
+        ttk.Label(detail, textvariable=self._cap_recording_var).grid(row=2, column=3, sticky="w", padx=2, pady=2)
+        capture_actions = ttk.Frame(detail)
+        capture_actions.grid(row=3, column=0, columnspan=4, sticky="w", padx=4, pady=(3, 6))
         self._cap_rename_btn = ttk.Button(capture_actions, text="Rename", command=self._cap_rename)
-        self._cap_rename_btn.grid(row=0, column=2, padx=2)
+        self._cap_rename_btn.grid(row=0, column=0, padx=2)
         self._cap_delete_btn = ttk.Button(capture_actions, text="Delete", command=self._cap_delete)
-        self._cap_delete_btn.grid(row=0, column=3, padx=2)
-        self._cap_check_sds_btn = ttk.Button(capture_actions, text="Check SDS", command=self._cap_check_sds)
-        self._cap_check_sds_btn.grid(row=0, column=4, padx=2)
-        self._cap_sds_status_var = tk.StringVar(value="SDS: not assigned")
-        ttk.Label(capture_actions, textvariable=self._cap_sds_status_var).grid(
-            row=1, column=0, columnspan=5, sticky="w", pady=(4, 0)
-        )
+        self._cap_delete_btn.grid(row=0, column=1, padx=2)
 
-        upload_frame = ttk.LabelFrame(frame, text="Uploads")
-        upload_frame.grid(row=3, column=0, sticky="nsew", padx=4, pady=(0, 6))
-        upload_frame.columnconfigure(0, weight=1)
-        upload_frame.columnconfigure(1, weight=0)
-        upload_frame.rowconfigure(0, weight=2)
-        upload_frame.rowconfigure(2, weight=1)
-        upload_list = ttk.Frame(upload_frame)
-        upload_list.grid(row=0, column=0, sticky="nsew", padx=4, pady=(4, 2))
-        upload_list.columnconfigure(0, weight=1)
-        upload_list.rowconfigure(0, weight=1)
-        uploads = ttk.Treeview(
-            upload_list,
-            columns=("capture", "destination", "state", "progress", "retries", "path", "error"),
-            show="headings",
-            height=5,
-        )
-        uploads.grid(row=0, column=0, sticky="nsew")
-        upload_scrollbar = ttk.Scrollbar(upload_list, orient="vertical", command=uploads.yview)
-        upload_scrollbar.grid(row=0, column=1, sticky="ns")
-        uploads.configure(yscrollcommand=upload_scrollbar.set)
-        for key, label, width in (
-            ("capture", "Upload Capture", 135),
-            ("destination", "Destination", 75),
-            ("state", "State", 110),
-            ("progress", "Progress", 190),
-            ("retries", "Retries", 50),
-            ("path", "Remote Path", 190),
-            ("error", "Last Error", 240),
-        ):
-            uploads.heading(key, text=label)
-            uploads.column(key, width=width, anchor="w")
-        self._cap_upload_tree = uploads
-        self._cap_upload_by_iid = {}
-        uploads.bind("<<TreeviewSelect>>", self._cap_upload_selection_changed)
+        upload_frame = ttk.LabelFrame(frame, text="SDS Upload")
+        upload_frame.grid(row=2, column=0, sticky="ew", padx=4, pady=(0, 4))
+        upload_frame.columnconfigure(1, weight=1)
+        upload_frame.columnconfigure(3, weight=1)
+        self._cap_upload_state_var = tk.StringVar(value="-")
+        self._cap_remote_var = tk.StringVar(value="-")
+        self._cap_verified_bytes_var = tk.StringVar(value="-")
+        self._cap_verified_files_var = tk.StringVar(value="-")
 
-        activity_frame = ttk.Frame(upload_frame)
-        activity_frame.grid(row=2, column=0, sticky="nsew", padx=4, pady=(2, 4))
-        activity_frame.columnconfigure(0, weight=1)
-        activity_frame.rowconfigure(2, weight=1)
-        ttk.Label(activity_frame, text="Selected Upload Activity").grid(row=0, column=0, sticky="w", pady=(0, 3))
-        self._cap_sdk_progress_var = tk.StringVar(value="SDK progress: -")
-        ttk.Label(
-            activity_frame,
-            textvariable=self._cap_sdk_progress_var,
-            font=("TkFixedFont", 8),
-        ).grid(row=1, column=0, sticky="ew", pady=(0, 3))
-        self._cap_upload_activity_text = scrolledtext.ScrolledText(
-            activity_frame,
-            height=8,
-            wrap="word",
-            state="disabled",
-            font=("TkFixedFont", 8),
-        )
-        self._cap_upload_activity_text.grid(row=2, column=0, sticky="nsew")
-        self._cap_activity_signature = None
-        self._cap_activity_request_job_id = None
-        self._cap_activity_loaded_revision = (None, None)
-        self._cap_activity_job_id = None
-        self._cap_activity_items = []
-        self._bind_copy_menu(self._cap_upload_activity_text, allow_paste=False)
-        self._cap_render_upload_activity(message="Select an upload to view its activity")
+        ttk.Label(upload_frame, text="Remote").grid(row=0, column=0, sticky="w", padx=(6, 2), pady=(5, 2))
+        remote_entry = ttk.Entry(upload_frame, textvariable=self._cap_remote_var, state="readonly")
+        remote_entry.grid(row=0, column=1, sticky="ew", padx=2, pady=(5, 2))
+        self._bind_copy_menu(remote_entry, strvar=self._cap_remote_var, allow_paste=False)
+        ttk.Label(upload_frame, text="Verified").grid(row=0, column=2, sticky="w", padx=(12, 2), pady=(5, 2))
+        ttk.Label(upload_frame, textvariable=self._cap_verified_bytes_var).grid(row=0, column=3, sticky="w", padx=(2, 6), pady=(5, 2))
+
+        ttk.Label(upload_frame, text="State").grid(row=1, column=0, sticky="w", padx=(6, 2), pady=2)
+        ttk.Label(upload_frame, textvariable=self._cap_upload_state_var).grid(row=1, column=1, sticky="w", padx=2, pady=2)
+        ttk.Label(upload_frame, text="Files").grid(row=1, column=2, sticky="w", padx=(12, 2), pady=2)
+        ttk.Label(upload_frame, textvariable=self._cap_verified_files_var).grid(row=1, column=3, sticky="w", padx=(2, 6), pady=2)
 
         actions = ttk.Frame(upload_frame)
-        actions.grid(row=1, column=0, sticky="ew", padx=6, pady=(3, 4))
+        actions.grid(row=2, column=0, columnspan=4, sticky="ew", padx=6, pady=(3, 6))
         actions.columnconfigure(1, weight=1)
-        self._cap_destination_var = tk.StringVar(value="sds")
         self._cap_token_var = tk.StringVar()
         self._cap_dry_run_var = tk.BooleanVar(value=False)
-        self._cap_token_var.trace_add(
-            "write", lambda *_: self._cap_update_details_and_actions()
-        )
-        ttk.Label(actions, text="Destination").grid(row=0, column=0, sticky="w")
-        ttk.Combobox(actions, textvariable=self._cap_destination_var, values=("sds",), state="readonly", width=8).grid(row=0, column=1, sticky="w", padx=4)
+        self._cap_verbose_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(actions, text="Dry run", variable=self._cap_dry_run_var).grid(row=0, column=2, sticky="w", padx=4)
-        ttk.Label(actions, text="Token").grid(row=1, column=0, sticky="w", pady=(4, 0))
-        ttk.Entry(actions, textvariable=self._cap_token_var, show="*").grid(row=1, column=1, sticky="ew", padx=4, pady=(4, 0))
+        ttk.Checkbutton(actions, text="Verbose", variable=self._cap_verbose_var).grid(row=0, column=3, sticky="w", padx=4)
+        ttk.Label(actions, text="Token").grid(row=0, column=0, sticky="w")
+        ttk.Entry(actions, textvariable=self._cap_token_var, show="*").grid(row=0, column=1, sticky="ew", padx=4)
         self._cap_upload_btn = ttk.Button(actions, text="Upload", command=self._cap_start_upload)
         self._cap_upload_btn.grid(row=1, column=2, padx=2, pady=(4, 0))
-        self._cap_pause_btn = ttk.Button(actions, text="Pause", command=self._cap_pause_upload)
-        self._cap_pause_btn.grid(row=1, column=3, padx=2, pady=(4, 0))
-        self._cap_cancel_btn = ttk.Button(actions, text="Stop", command=self._cap_cancel_upload)
-        self._cap_cancel_btn.grid(row=1, column=4, padx=2, pady=(4, 0))
-        self._cap_retry_btn = ttk.Button(actions, text="Retry", command=self._cap_retry_upload)
-        self._cap_retry_btn.grid(row=2, column=2, padx=2, pady=(4, 0))
-        self._cap_remove_job_btn = ttk.Button(actions, text="Remove Job", command=self._cap_remove_upload)
-        self._cap_remove_job_btn.grid(row=2, column=4, padx=2, pady=(4, 0))
+        self._cap_stop_btn = ttk.Button(actions, text="Stop", command=self._cap_stop_upload)
+        self._cap_stop_btn.grid(row=1, column=3, padx=2, pady=(4, 0))
+        self._cap_verify_btn = ttk.Button(actions, text="Verify", command=self._cap_verify_upload)
+        self._cap_verify_btn.grid(row=1, column=4, padx=2, pady=(4, 0))
         self._cap_action_reason_var = tk.StringVar(value="Select a capture to manage or upload")
-        ttk.Label(
-            actions,
-            textvariable=self._cap_action_reason_var,
-            foreground="grey",
-        ).grid(row=3, column=0, columnspan=5, sticky="w", pady=(5, 0))
+        ttk.Label(actions, textvariable=self._cap_action_reason_var, foreground="grey").grid(row=2, column=0, columnspan=5, sticky="w", pady=(5, 0))
 
-        self._refresh_cap_tab()
+        activity_frame = ttk.LabelFrame(frame, text="Details")
+        activity_frame.grid(row=3, column=0, sticky="nsew", padx=4, pady=(0, 6))
+        activity_frame.columnconfigure(0, weight=1)
+        activity_frame.rowconfigure(0, weight=1)
+        self._cap_upload_activity_text = scrolledtext.ScrolledText(activity_frame, height=10, wrap="word", state="disabled", font=("TkFixedFont", 8))
+        self._cap_upload_activity_text.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
+        self._bind_copy_menu(self._cap_upload_activity_text, allow_paste=False)
+        self._cap_set_details("Select a capture to view upload details")
 
-    def _refresh_cap_tab(self):
-        self.archive_manager.refresh(callback=lambda response: self._gui_call(self._cap_refresh_response, response))
-        self.upload_manager.refresh(callback=lambda response: self._gui_call(self._cap_refresh_response, response))
         self._render_cap_tab()
 
-    def _cap_refresh_response(self, response):
+    def _cap_service_response(self, response, show_error=False):
         if not response.get("success"):
-            logging.error("CAP refresh failed: %s", response.get("error") or "unknown error")
-        self._cap_apply_service_status(response)
+            error = response.get("error") or "Unknown service error"
+            logging.error("CAP service request failed: %s", error)
+            if show_error:
+                messagebox.showerror("CAP Action Failed", error)
+        self._render_cap_tab()
 
     def _render_cap_tab(self):
         tree = getattr(self, "_cap_tree", None)
         if tree is None:
             return
-        selected_capture_key = self._cap_capture_key(self._cap_selected_capture())
-        selected_job_id = self._cap_selected_job_id()
+        selection = tree.selection()
+        selected_capture = self._cap_capture_by_iid.get(selection[0]) if selection else None
+        selected_name = str(selected_capture.get("name") or "") if selected_capture else ""
         captures = self.archive_manager.list_captures()
-        upload_jobs = self.upload_manager.get_uploads()
-        jobs_by_capture = {}
-        for job in upload_jobs:
-            jobs_by_capture.setdefault(str(job.get("capture_id") or ""), []).append(job)
+        uploads = self.upload_manager.get_uploads()
+        self._cap_uploads_by_capture = {
+            str(upload.get("capture_name") or ""): upload
+            for upload in uploads
+            if isinstance(upload, dict) and upload.get("capture_name")
+        }
         orchestrator = self.capture_orchestrator.get_status()
         rx = orchestrator.get("rx") if isinstance(orchestrator.get("rx"), dict) else {}
         rx_active = rx.get("state") in {"starting", "running"}
-        signature = json.dumps({
-            "captures": captures,
-            "uploads": upload_jobs,
-            "rx": {
-                "state": rx.get("state"),
-                "capture_id": rx.get("capture_id"),
-                "capture_name": rx.get("capture_name"),
-            },
-        }, sort_keys=True, separators=(",", ":"), default=str)
-        if signature == self._cap_last_render_signature:
-            self._cap_update_details_and_actions()
-            self._cap_refresh_upload_activity()
-            return
-        self._cap_last_render_signature = signature
-        existing_capture_iids = {
-            self._cap_capture_key(capture): iid
-            for iid, capture in self._cap_capture_by_iid.items()
-        }
-        updated_captures = {}
-        first_capture_iid = None
-        for index, capture in enumerate(captures):
-            capture_id = str(capture.get("capture_id") or "")
-            name = str(capture.get("name") or capture_id or "unknown")
-            recording = rx_active and (capture_id == str(rx.get("capture_id") or "") or name == rx.get("capture_name"))
-            capture_jobs = jobs_by_capture.get(capture_id, [])
-            latest_job = capture_jobs[0] if capture_jobs else {}
+        tree.delete(*tree.get_children())
+        self._cap_capture_by_iid = {}
+        selected_iid = None
+        for capture in captures:
+            name = str(capture.get("name") or "unknown")
+            recording = rx_active and name == (rx.get("capture_name") or "preview")
+            upload = self._cap_uploads_by_capture.get(name, {})
             values = (
                 name,
-                capture.get("state") or "legacy",
-                self._cap_format_capture_size(capture.get("size_bytes")),
+                self._cap_format_bytes(capture.get("size_bytes"), decimals=0),
                 capture.get("file_count") or 0,
-                self._cap_format_time(capture.get("last_modified")),
-                "active" if recording else "idle",
-                latest_job.get("state") or "-",
+                self._cap_format_sds_state(upload),
             )
-            capture_key = self._cap_capture_key(capture)
-            iid = existing_capture_iids.get(capture_key)
-            if iid is None or not tree.exists(iid):
-                iid = tree.insert("", "end", values=values)
-            else:
-                if tuple(tree.item(iid, "values")) != tuple(str(value) for value in values):
-                    tree.item(iid, values=values)
-                if tree.index(iid) != index:
-                    tree.move(iid, "", index)
-            updated_captures[iid] = capture
-            if first_capture_iid is None:
-                first_capture_iid = iid
-            if capture_key == selected_capture_key and tree.selection() != (iid,):
-                tree.selection_set(iid)
+            iid = tree.insert("", "end", values=values)
+            self._cap_capture_by_iid[iid] = capture
+            if name == selected_name:
+                selected_iid = iid
+        children = tree.get_children()
+        if selected_iid or children:
+            tree.selection_set(selected_iid or children[0])
 
-        for capture_key, iid in existing_capture_iids.items():
-            if iid not in updated_captures and tree.exists(iid):
-                tree.delete(iid)
-        self._cap_capture_by_iid = updated_captures
+        self._cap_update_selected_capture()
 
-        if not tree.selection() and first_capture_iid is not None:
-            tree.selection_set(first_capture_iid)
-
-        upload_tree = self._cap_upload_tree
-        existing_upload_iids = {
-            str(job.get("job_id") or ""): iid
-            for iid, job in self._cap_upload_by_iid.items()
-        }
-        updated_uploads = {}
-        for index, job in enumerate(upload_jobs):
-            uploaded = int(job.get("uploaded_bytes") or 0)
-            total = int(job.get("total_bytes") or 0)
-            current_file = str(job.get("current_file") or "").strip()
-            progress = current_file or f"{self._cap_format_bytes(uploaded)} / {self._cap_format_bytes(total)}"
-            values = (
-                job.get("name") or job.get("capture_id") or "unknown",
-                job.get("destination") or "-",
-                job.get("state") or "unknown",
-                progress,
-                job.get("retry_count") or 0,
-                job.get("sds_path") or "-",
-                job.get("last_error") or "-",
-            )
-            job_id = str(job.get("job_id") or "")
-            iid = existing_upload_iids.get(job_id)
-            if iid is None or not upload_tree.exists(iid):
-                iid = upload_tree.insert("", "end", values=values)
-            else:
-                if tuple(upload_tree.item(iid, "values")) != tuple(str(value) for value in values):
-                    upload_tree.item(iid, values=values)
-                if upload_tree.index(iid) != index:
-                    upload_tree.move(iid, "", index)
-            updated_uploads[iid] = job
-            if job_id == selected_job_id and upload_tree.selection() != (iid,):
-                upload_tree.selection_set(iid)
-
-        for job_id, iid in existing_upload_iids.items():
-            if iid not in updated_uploads and upload_tree.exists(iid):
-                upload_tree.delete(iid)
-        self._cap_upload_by_iid = updated_uploads
-
-        service_status = self.archive_manager.get_status()
-        upload_status = self.upload_manager.get_status()
-        parts = [
-            f"ArchiveManager: {service_status.get('state') or 'unavailable'}",
-            f"UploadManager: {upload_status.get('state') or 'unavailable'}",
-        ]
-        if hasattr(self, "_cap_status_var"):
-            self._cap_status_var.set("; ".join(parts))
-        self._cap_update_details_and_actions()
-        self._cap_refresh_upload_activity()
-
-    def _cap_selected_capture(self):
-        selection = self._cap_tree.selection() if hasattr(self, "_cap_tree") else ()
-        return self._cap_capture_by_iid.get(selection[0]) if selection else None
-
-    def _cap_selected_upload(self):
-        selection = self._cap_upload_tree.selection() if hasattr(self, "_cap_upload_tree") else ()
-        return self._cap_upload_by_iid.get(selection[0]) if selection else None
-
-    def _cap_selected_capture_id(self):
-        capture = self._cap_selected_capture()
-        return str(capture.get("capture_id") or "") if capture else ""
-
-    @staticmethod
-    def _cap_capture_key(capture):
-        if not isinstance(capture, dict):
-            return ""
-        capture_id = str(capture.get("capture_id") or "")
-        if capture_id:
-            return f"id:{capture_id}"
-        path = str(capture.get("path") or "")
-        return f"legacy:{path or capture.get('name') or ''}"
-
-    def _cap_selected_job_id(self):
-        upload = self._cap_selected_upload()
-        return str(upload.get("job_id") or "") if upload else ""
+    def _cap_selection(self):
+        selection = self._cap_tree.selection()
+        capture = self._cap_capture_by_iid.get(selection[0]) if selection else None
+        capture_name = str(capture.get("name") or "") if capture else ""
+        upload = self._cap_uploads_by_capture.get(capture_name)
+        return capture, upload
 
     def _cap_selection_changed(self, event=None):
-        capture = self._cap_selected_capture()
-        self._cap_rename_var.set(str(capture.get("name") or "") if capture else "")
-        self._cap_update_details_and_actions()
+        capture, _upload = self._cap_selection()
+        capture_name = str(capture.get("name") or "") if capture else ""
+        self._cap_rename_var.set(capture_name)
+        if capture_name != self._cap_details_capture_name:
+            self._cap_details_capture_name = capture_name or None
+            if not capture_name:
+                self._cap_set_details("Select a capture to view upload details")
+            else:
+                activity = self._cap_activity_by_capture.get(capture_name)
+                self._cap_set_details(
+                    "\n".join(self._cap_format_activity(item) for item in activity)
+                    if activity
+                    else "Loading upload activity"
+                )
+                self.upload_manager.get_activity(
+                    capture_name,
+                    callback=lambda response: self._gui_call(self._cap_activity_response, response),
+                )
+        self._cap_update_selected_capture()
 
-    def _cap_upload_selection_changed(self, event=None):
-        self._cap_sdk_progress_var.set("SDK progress: -")
-        self._cap_update_details_and_actions()
-        self._cap_refresh_upload_activity(force=True)
-
-    def _cap_refresh_upload_activity(self, force=False):
-        upload = self._cap_selected_upload()
-        job_id = str(upload.get("job_id") or "") if upload else ""
-        if not job_id:
-            self._cap_activity_request_job_id = None
-            self._cap_activity_loaded_revision = (None, None)
-            self._cap_activity_job_id = None
-            self._cap_activity_items = []
-            self._cap_render_upload_activity(message="Select an upload to view its activity")
-            return
-        job_changed = self._cap_activity_job_id != job_id
-        if job_changed:
-            self._cap_activity_job_id = job_id
-            self._cap_activity_items = []
-            self._cap_activity_loaded_revision = (None, None)
-            self._cap_render_upload_activity(message="Loading upload activity...")
-        if self._cap_activity_request_job_id == job_id:
-            return
-        if not force and not job_changed:
-            return
-        self._cap_activity_request_job_id = job_id
-        self.upload_manager.get_upload_activity(
-            job_id,
-            callback=lambda response: self._gui_call(self._cap_upload_activity_response, response),
-        )
-
-    def _cap_upload_activity_response(self, response):
+    def _cap_activity_response(self, response):
         status_data = response.get("status_data") if isinstance(response, dict) else None
-        job_id = str(status_data.get("job_id") or "") if isinstance(status_data, dict) else ""
-        if job_id == self._cap_activity_request_job_id:
-            self._cap_activity_request_job_id = None
-        if not response.get("success"):
-            self._cap_render_upload_activity(message=f"Activity unavailable: {response.get('error') or 'unknown error'}")
+        if not response.get("success") or not isinstance(status_data, dict):
             return
-        if job_id != self._cap_selected_job_id():
+        capture_name = str(status_data.get("capture_name") or "")
+        records = status_data.get("activity")
+        if not capture_name or not isinstance(records, list):
             return
-        activity = status_data.get("activity") if isinstance(status_data.get("activity"), list) else []
-        known = {
-            item.get("activity_id"): item
-            for item in self._cap_activity_items
-            if isinstance(item, dict) and item.get("activity_id") is not None
+        persisted = [item for item in records if isinstance(item, dict)]
+        live = list(self._cap_activity_by_capture.get(capture_name, ()))
+        persisted_keys = {
+            (item.get("timestamp"), item.get("event"), item.get("message"))
+            for item in persisted
         }
-        for item in activity:
-            if isinstance(item, dict):
-                known[item.get("activity_id")] = item
-        self._cap_activity_items = sorted(
-            known.values(),
-            key=lambda item: (float(item.get("timestamp") or 0), int(item.get("activity_id") or 0)),
-        )[-500:]
-        upload = self._cap_selected_upload()
-        self._cap_activity_loaded_revision = (job_id, upload.get("activity_revision") if upload else None)
-        self._cap_render_upload_activity(self._cap_activity_items)
+        activity = deque(
+            persisted + [
+                item for item in live
+                if (item.get("timestamp"), item.get("event"), item.get("message")) not in persisted_keys
+            ],
+            maxlen=500,
+        )
+        self._cap_activity_by_capture[capture_name] = activity
+        if capture_name == self._cap_details_capture_name:
+            self._cap_set_details(
+                "\n".join(self._cap_format_activity(item) for item in activity)
+                if activity
+                else "No upload activity"
+            )
 
     def _cap_upload_activity_event(self, data):
-        if not isinstance(data, dict):
+        if not hasattr(self, "_cap_tree") or not isinstance(data, dict):
             return
         status_data = data.get("status_data")
         if not isinstance(status_data, dict):
             return
         event_type = data.get("event_type")
         if event_type in {"sds_check_started", "sds_check_completed"}:
-            capture = self._cap_selected_capture()
-            if capture and str(capture.get("capture_id") or "") == str(status_data.get("capture_id") or ""):
+            capture, _upload = self._cap_selection()
+            capture_name = str(status_data.get("capture_name") or "")
+            capture_selected = capture and str(capture.get("name") or "") == capture_name
+            if capture_selected:
                 if event_type == "sds_check_started":
-                    self._cap_sds_status_var.set("SDS: checking...")
-                    self._cap_check_sds_btn.configure(state="disabled")
+                    self._cap_verified_bytes_var.set("Checking...")
+                    self._cap_verified_files_var.set("Checking...")
+                    self._cap_verify_btn.configure(state="disabled")
                 else:
-                    check = dict(status_data)
-                    if "verification_status" not in check:
-                        check["verification_status"] = check.get("result")
-                    self._cap_sds_status_var.set(self._cap_format_sds_check(check))
+                    state = str(status_data.get("state") or "unknown").replace("_", " ")
+                    self._cap_action_reason_var.set(f"SDS verification: {state}")
             return
-        job_id = str(status_data.get("job_id") or "")
-        if event_type == "upload_sdk_progress":
-            if job_id == self._cap_selected_job_id():
-                message = str(status_data.get("message") or "-")
-                self._cap_sdk_progress_var.set(f"SDK progress: {message}")
+        if event_type == "upload_failed":
+            activity = {
+                "timestamp": data.get("timestamp") or time.time(),
+                "level": "error",
+                "event": "failed",
+                "message": status_data.get("error") or "Upload failed",
+            }
+        elif event_type == "upload_activity":
+            activity = status_data.get("activity")
+        else:
             return
-        if event_type != "upload_activity":
+        capture_name = str(status_data.get("capture_name") or "")
+        if not capture_name or not isinstance(activity, dict):
             return
-        activity = status_data.get("activity")
-        if job_id != self._cap_selected_job_id() or not isinstance(activity, dict):
+        capture, _upload = self._cap_selection()
+        if not capture or capture_name != str(capture.get("name") or ""):
+            self._cap_activity_by_capture.setdefault(capture_name, deque(maxlen=500)).append(activity)
             return
-        if activity.get("event") in {
-            "upload_returned",
-            "verification_pending",
-            "error",
-            "cancelled",
-            "completed",
-        }:
-            self._cap_sdk_progress_var.set("SDK progress: -")
-        if self._cap_activity_job_id != job_id:
-            self._cap_activity_job_id = job_id
-            self._cap_activity_items = []
-        activity_id = activity.get("activity_id")
-        if activity_id is not None and any(
-            item.get("activity_id") == activity_id for item in self._cap_activity_items
-        ):
-            return
-        self._cap_activity_items.append(activity)
-        self._cap_activity_items = self._cap_activity_items[-500:]
-        self._cap_activity_loaded_revision = (job_id, activity_id)
-        self._cap_append_upload_activity(activity)
+        self._cap_activity_by_capture.setdefault(capture_name, deque(maxlen=500)).append(activity)
+        self._cap_append_detail(self._cap_format_activity(activity))
 
     @staticmethod
-    def _cap_format_upload_activity_item(item):
+    def _cap_format_activity(activity):
         try:
-            timestamp = datetime.datetime.fromtimestamp(float(item.get("timestamp"))).strftime("%H:%M:%S")
+            timestamp = datetime.datetime.fromtimestamp(float(activity.get("timestamp"))).strftime("%H:%M:%S")
         except (TypeError, ValueError, OSError):
             timestamp = "--:--:--"
-        level = str(item.get("level") or "info").upper()
-        return f"{timestamp} {level:<7} {item.get('message') or item.get('event') or '-'}"
+        level = str(activity.get("level") or "info").upper()
+        message = activity.get("message") or activity.get("event") or "-"
+        return f"{timestamp} {level:<7} {message}"
 
-    def _cap_append_upload_activity(self, item):
-        widget = getattr(self, "_cap_upload_activity_text", None)
-        if widget is None:
-            return
-        yview = widget.yview()
-        follow_tail = not yview or yview[1] >= 0.98
-        widget.configure(state="normal")
-        if widget.index("end-1c") != "1.0":
-            widget.insert("end", "\n")
-        widget.insert("end", self._cap_format_upload_activity_item(item))
-        widget.configure(state="disabled")
-        if follow_tail:
-            widget.see("end")
-        self._cap_activity_signature = None
-
-    def _cap_render_upload_activity(self, activity=None, message=None):
-        widget = getattr(self, "_cap_upload_activity_text", None)
-        if widget is None:
-            return
-        if message is not None:
-            text = message
-        else:
-            lines = []
-            for item in activity or []:
-                if not isinstance(item, dict):
-                    continue
-                lines.append(self._cap_format_upload_activity_item(item))
-            text = "\n".join(lines) if lines else "No activity has been recorded for this upload"
-        if text == self._cap_activity_signature:
-            return
-        yview = widget.yview()
-        follow_tail = not yview or yview[1] >= 0.98
+    def _cap_set_details(self, text):
+        widget = self._cap_upload_activity_text
         widget.configure(state="normal")
         widget.delete("1.0", "end")
         widget.insert("1.0", text)
         widget.configure(state="disabled")
-        if follow_tail:
-            widget.see("end")
-        elif yview:
-            widget.yview_moveto(yview[0])
-        self._cap_activity_signature = text
 
-    def _cap_update_details_and_actions(self):
-        capture = self._cap_selected_capture()
-        upload = self._cap_selected_upload()
-        latest_upload = self._cap_latest_upload(capture)
-        sds_check = self.upload_manager.get_sds_check(capture.get("capture_id")) if capture else {}
-        display_upload = {
-            key: value for key, value in upload.items() if key != "activity_revision"
-        } if isinstance(upload, dict) else upload
-        display_latest_upload = {
-            key: value for key, value in latest_upload.items() if key != "activity_revision"
-        } if isinstance(latest_upload, dict) else latest_upload
-        details = {
-            "capture": capture,
-            "latest_upload": display_latest_upload,
-            "selected_upload": display_upload,
-            "sds_check": sds_check or None,
-        }
-        text = "No capture selected" if capture is None else json.dumps(details, indent=2, sort_keys=True)
-        if text != self._cap_detail_signature:
-            yview = self._cap_detail_text.yview()
-            self._cap_detail_text.configure(state="normal")
-            self._cap_detail_text.delete("1.0", "end")
-            self._cap_detail_text.insert("1.0", text)
-            self._cap_detail_text.configure(state="disabled")
-            if yview:
-                self._cap_detail_text.yview_moveto(yview[0])
-            self._cap_detail_signature = text
+    def _cap_append_detail(self, text):
+        widget = self._cap_upload_activity_text
+        current = widget.get("1.0", "end-1c")
+        if current in {"Listening for live upload activity", "Select a capture to view upload details"}:
+            widget.configure(state="normal")
+            widget.delete("1.0", "end")
+        else:
+            widget.configure(state="normal")
+            widget.insert("end", "\n")
+        widget.insert("end", text)
+        widget.configure(state="disabled")
+        widget.see("end")
+
+    def _cap_update_selected_capture(self):
+        capture, upload = self._cap_selection()
+        sds_check = self.upload_manager.get_sds_check(capture.get("name")) if capture else {}
+        orchestrator = self.capture_orchestrator.get_status()
+        rx = orchestrator.get("rx") if isinstance(orchestrator.get("rx"), dict) else {}
+        recording = bool(
+            capture
+            and rx.get("state") in {"starting", "running"}
+            and str(capture.get("name") or "") == str(rx.get("capture_name") or "preview")
+        )
+        self._cap_size_var.set(self._cap_format_bytes(capture.get("size_bytes"), decimals=0) if capture else "-")
+        self._cap_files_var.set(str(capture.get("file_count") or 0) if capture else "-")
+        self._cap_modified_var.set(self._cap_format_time(capture.get("last_modified")) if capture else "-")
+        self._cap_recording_var.set("Active" if recording else "Done")
+
+        verification = upload.get("verification") if upload and isinstance(upload.get("verification"), dict) else {}
+        verified_bytes = verification.get("verified_bytes")
+        expected_bytes = verification.get("expected_bytes")
+        verified_files = verification.get("verified_files")
+        expected_files = verification.get("expected_files")
+        self._cap_upload_state_var.set(str(upload.get("state") or "-").replace("_", " ").title() if upload else "-")
+        self._cap_verified_bytes_var.set(
+            f"{self._cap_format_bytes(verified_bytes)} / {self._cap_format_bytes(expected_bytes)}"
+            if verified_bytes is not None and expected_bytes is not None
+            else "Checking..." if verification.get("state") == "checking" else "-"
+        )
+        self._cap_verified_files_var.set(
+            f"{verified_files} / {expected_files} files"
+            if verified_files is not None and expected_files is not None
+            else "Checking..." if verification.get("state") == "checking" else "-"
+        )
+        self._cap_remote_var.set(str(upload.get("remote_path") or "-") if upload else "-")
 
         data_ready = self.archive_manager.is_available()
         upload_ready = self.upload_manager.is_available()
-        upload_status = self.upload_manager.get_status()
-        managed = bool(capture and capture.get("state") == "managed" and capture.get("capture_id"))
-        preview = bool(capture and capture.get("name") == "preview")
-        orchestrator = self.capture_orchestrator.get_status()
-        rx = orchestrator.get("rx") if isinstance(orchestrator.get("rx"), dict) else {}
-        rx_capture_name = rx.get("capture_name") or "preview"
-        capture_id = str(capture.get("capture_id") or "") if capture else ""
-        rx_capture_id = str(rx.get("capture_id") or "")
-        recording = bool(capture and rx.get("state") in {"starting", "running"} and (
-            (capture_id and capture_id == rx_capture_id)
-            or capture.get("name") == rx_capture_name
-        ))
         active_states = {
             "queued",
             "scanning",
             "authenticating",
             "uploading",
             "verifying",
-            "verification_pending",
-            "pause_requested",
-            "paused",
-            "cancelling",
-            "waiting_for_retry",
-            "waiting_for_credentials",
+            "stopping",
         }
-        resumable_upload = self._cap_resumable_upload(capture)
-        capture_uploading = bool(capture and any(
-            job.get("capture_id") == capture.get("capture_id") and job.get("state") in active_states
-            for job in self.upload_manager.get_uploads()
-        ))
-        capture_cancelling = bool(capture and any(
-            job.get("capture_id") == capture.get("capture_id") and job.get("state") == "cancelling"
-            for job in self.upload_manager.get_uploads()
-        ))
-        capture_actionable = managed and not recording and not capture_uploading
-        capture_editable = capture_actionable and data_ready
-        capture_deletable = (managed or preview) and data_ready and not recording
-        any_upload_active = any(
-            job.get("state") in active_states - {"paused"}
-            for job in self.upload_manager.get_uploads()
-        )
-        token_entered = bool(self._cap_token_var.get().strip())
-        stored_credentials = bool(
-            resumable_upload and resumable_upload.get("credentials_stored")
-        )
-        environment_credentials = bool(
-            upload_status.get("environment_credentials_available")
-        )
-        credentials_available = (
-            token_entered or stored_credentials or environment_credentials
-        )
-        capture_uploadable = managed and upload_ready and not recording and (
-            not capture_uploading or resumable_upload is not None
-        ) and credentials_available
-        self._cap_rename_btn.configure(state="normal" if capture_editable else "disabled")
-        self._cap_delete_btn.configure(state="normal" if capture_deletable else "disabled")
-        check_status = str(sds_check.get("verification_status") or "never_checked")
-        check_assigned = bool(sds_check.get("remote_path"))
-        self._cap_check_sds_btn.configure(
-            state="normal" if managed and upload_ready and check_assigned and check_status != "checking" and not any_upload_active else "disabled"
-        )
-        self._cap_sds_status_var.set(self._cap_format_sds_check(sds_check))
-        upload_button_text = "Upload"
-        if resumable_upload is not None:
-            upload_button_text = (
-                "Resume Upload"
-                if resumable_upload.get("state") in {"paused", "waiting_for_credentials"}
-                else "Retry Upload"
-            )
+        upload_state = upload.get("state") if upload else None
+        capture_uploadable = bool(capture and upload_ready and upload_state not in active_states)
+        self._cap_rename_btn.configure(state="normal" if capture and data_ready else "disabled")
+        self._cap_delete_btn.configure(state="normal" if capture and data_ready else "disabled")
         self._cap_upload_btn.configure(
-            text=upload_button_text,
             state="normal" if capture_uploadable else "disabled",
         )
-        job_state = upload.get("state") if upload else None
-        self._cap_pause_btn.configure(
-            state="normal" if upload_ready and job_state in active_states - {"paused", "pause_requested", "cancelling"} else "disabled"
+        self._cap_stop_btn.configure(
+            state="normal" if upload_ready and upload_state in active_states - {"stopping"} else "disabled"
         )
-        self._cap_cancel_btn.configure(state="normal" if upload_ready and job_state in active_states else "disabled")
-        retry_has_credentials = bool(
-            token_entered
-            or environment_credentials
-            or (upload and upload.get("credentials_stored"))
+        self._cap_verify_btn.configure(
+            state="normal"
+            if upload_ready and upload and upload.get("remote_path") and upload_state not in active_states and str(upload.get("verification", {}).get("state") or "") != "checking"
+            else "disabled"
         )
-        self._cap_retry_btn.configure(state="normal" if upload_ready and retry_has_credentials and job_state in {"failed", "cancelled", "complete", "verification_pending", "waiting_for_retry", "waiting_for_credentials"} else "disabled")
-        self._cap_remove_job_btn.configure(state="normal" if upload_ready and job_state in {"failed", "cancelled", "complete"} else "disabled")
         if capture is None:
             reason = "Select a capture to manage or upload"
-        elif preview:
-            reason = "Preview data can be deleted when no preview recording is active"
-        elif not managed:
-            reason = "Legacy capture: no capture identity is available for service actions"
-        elif recording:
-            reason = "Capture controls are locked while this recording is active"
-        elif resumable_upload is not None and resumable_upload.get("state") == "waiting_for_credentials":
-            reason = "Credentials required: enter an SDS token and click Resume Upload"
-        elif resumable_upload is not None:
-            upload_error = resumable_upload.get("last_error")
-            reason = (
-                f"Upload error: {upload_error}; click Retry Upload to retry now"
-                if upload_error
-                else "Upload is waiting to retry; click Retry Upload to retry now"
-            )
-        elif capture_cancelling:
-            reason = "Stop requested; local capture deletion is available"
-        elif capture_uploading:
-            reason = "Capture controls are locked while its upload is active"
+        elif upload_state == "waiting_for_credentials":
+            reason = "Credentials required: enter an SDS token and click Upload"
+        elif upload_state == "failed":
+            reason = str(upload.get("error") or "Upload failed; click Upload to continue")
+        elif upload_state == "stopping":
+            reason = "Stop requested; waiting for the current SDK operation to return"
         elif not upload_ready:
             reason = "UploadManager is unavailable"
-        elif not credentials_available:
-            reason = "Enter an SDS token to enable Upload"
-        elif latest_upload and latest_upload.get("last_error"):
-            reason = f"Last upload error: {latest_upload['last_error']}"
         else:
             reason = "Ready"
         self._cap_action_reason_var.set(reason)
 
-    def _cap_latest_upload(self, capture):
-        if not isinstance(capture, dict) or not capture.get("capture_id"):
-            return None
-        capture_id = str(capture["capture_id"])
-        return next(
-            (
-                job
-                for job in self.upload_manager.get_uploads()
-                if str(job.get("capture_id") or "") == capture_id
-            ),
-            None,
-        )
-
-    def _cap_resumable_upload(self, capture):
-        if not isinstance(capture, dict) or not capture.get("capture_id"):
-            return None
-        capture_id = str(capture["capture_id"])
-        return next(
-            (
-                job
-                for job in self.upload_manager.get_uploads()
-                if str(job.get("capture_id") or "") == capture_id
-                and job.get("state") in {
-                    "paused",
-                    "waiting_for_credentials",
-                    "waiting_for_retry",
-                }
-            ),
-            None,
-        )
-
     @staticmethod
-    def _cap_format_sds_check(check):
-        if not isinstance(check, dict) or not check.get("remote_path"):
-            return "SDS: not assigned"
-        status = str(check.get("verification_status") or "never_checked")
-        if status == "checking":
-            return f"SDS: checking {check['remote_path']}"
-        if status == "verified":
-            return f"SDS: verified {check.get('verified_files') or 0}/{check.get('expected_files') or 0} files"
-        if status == "incomplete":
-            return f"SDS: incomplete ({check.get('missing_files') or 0} missing, {check.get('wrong_size_files') or 0} wrong size)"
-        if status == "credentials_required":
-            return "SDS: credentials required"
-        if status == "unavailable":
-            return f"SDS: unavailable ({check.get('verification_error') or 'unknown error'})"
-        return f"SDS: {status.replace('_', ' ')}"
+    def _cap_format_sds_state(upload):
+        if not isinstance(upload, dict):
+            return "-"
+        state = str(upload.get("state") or "")
+        if state in {"queued", "scanning", "authenticating", "uploading", "verifying", "stopping"}:
+            return state.replace("_", " ").title()
+        verification = upload.get("verification")
+        if isinstance(verification, dict):
+            verification_state = str(verification.get("state") or "")
+            if verification_state in {"checking", "verified", "incomplete", "unavailable"}:
+                return verification_state.replace("_", " ").title()
+        if state == "error":
+            return "Cannot read status"
+        return state.replace("_", " ").title() or "-"
 
     def _cap_rename(self):
-        capture = self._cap_selected_capture()
+        capture, _upload = self._cap_selection()
         new_name = self._cap_rename_var.get().strip()
         if not capture or not new_name:
             return
-        self.archive_manager.rename_capture(capture["capture_id"], new_name, callback=lambda response: self._gui_call(self._cap_action_response, response))
+        self.archive_manager.rename_capture(
+            capture["name"],
+            new_name,
+            callback=lambda response: self._gui_call(self._cap_service_response, response, True),
+        )
 
     def _cap_delete(self):
-        capture = self._cap_selected_capture()
+        capture, _upload = self._cap_selection()
         if not capture or not messagebox.askokcancel("Delete Capture", f"Permanently delete {capture.get('name')!r} and all of its local files?"):
             return
-        callback = lambda response: self._gui_call(self._cap_action_response, response)
+        callback = lambda response: self._gui_call(self._cap_service_response, response, True)
         if capture.get("name") == "preview":
             self.archive_manager.delete_preview(callback=callback)
         else:
-            self.archive_manager.delete_capture(capture["capture_id"], callback=callback)
+            self.archive_manager.delete_capture(capture["name"], callback=callback)
 
     def _cap_start_upload(self):
-        capture = self._cap_selected_capture()
+        capture, _upload = self._cap_selection()
         if not capture:
             return
         if not self.upload_manager.is_available():
@@ -2362,99 +2052,45 @@ class MEPGui:
             return
         token = self._cap_token_var.get()
         credentials = {"token": token} if token else None
-        dry_run = self._cap_dry_run_var.get()
-        resumable_upload = self._cap_resumable_upload(capture)
-        if resumable_upload is not None:
-            if resumable_upload.get("state") == "paused":
-                self.upload_manager.resume_upload(
-                    resumable_upload["job_id"],
-                    credentials=credentials,
-                    callback=lambda response: self._gui_call(self._cap_action_response, response),
-                )
-                return
-            self.upload_manager.retry_upload(
-                resumable_upload["job_id"],
-                credentials=credentials,
-                dry_run=dry_run,
-                callback=lambda response: self._gui_call(self._cap_action_response, response),
-            )
-            return
+        self._cap_set_details("Waiting for live upload output")
         self.upload_manager.start_upload(
-            capture["capture_id"],
-            destination=self._cap_destination_var.get(),
+            capture["name"],
             credentials=credentials,
-            dry_run=dry_run,
-            callback=lambda response: self._gui_call(self._cap_action_response, response),
+            dry_run=self._cap_dry_run_var.get(),
+            verbose=self._cap_verbose_var.get(),
+            callback=lambda response: self._gui_call(self._cap_service_response, response, True),
         )
 
-    def _cap_check_sds(self):
-        capture = self._cap_selected_capture()
-        if not capture or not capture.get("capture_id"):
+    def _cap_stop_upload(self):
+        _capture, upload = self._cap_selection()
+        if upload:
+            self._cap_action_reason_var.set("Stop requested; waiting for UploadManager acknowledgement")
+            self._cap_append_detail("Stop requested; waiting for the current SDK operation to return")
+            self.upload_manager.stop_upload(
+                upload["capture_name"],
+                callback=lambda response: self._gui_call(self._cap_service_response, response, True),
+            )
+
+    def _cap_verify_upload(self):
+        _capture, upload = self._cap_selection()
+        if not upload:
             return
         token = self._cap_token_var.get().strip()
         credentials = {"token": token} if token else None
-        self._cap_sds_status_var.set("SDS: checking...")
-        self._cap_check_sds_btn.configure(state="disabled")
+        self._cap_action_reason_var.set("SDS verification requested")
+        self._cap_verify_btn.configure(state="disabled")
         self.upload_manager.check_sds(
-            capture["capture_id"],
+            upload["capture_name"],
             credentials=credentials,
-            callback=lambda response: self._gui_call(self._cap_action_response, response),
+            callback=lambda response: self._gui_call(self._cap_service_response, response, True),
         )
-
-    def _cap_pause_upload(self):
-        upload = self._cap_selected_upload()
-        if upload:
-            self._cap_action_reason_var.set("Pause requested; waiting for UploadManager acknowledgement")
-            self.upload_manager.pause_upload(
-                upload["job_id"],
-                callback=lambda response: self._gui_call(self._cap_action_response, response),
-            )
-
-    def _cap_cancel_upload(self):
-        upload = self._cap_selected_upload()
-        if upload:
-            self._cap_activity_loaded_revision = (None, None)
-            self._cap_action_reason_var.set("Stop requested; waiting for UploadManager acknowledgement")
-            self._cap_render_upload_activity(message="Stop requested; waiting for UploadManager acknowledgement")
-            self.upload_manager.cancel_upload(upload["job_id"], callback=lambda response: self._gui_call(self._cap_action_response, response))
-
-    def _cap_retry_upload(self):
-        upload = self._cap_selected_upload()
-        if not upload:
-            return
-        token = self._cap_token_var.get()
-        credentials = {"token": token} if token else None
-        self.upload_manager.retry_upload(
-            upload["job_id"],
-            credentials=credentials,
-            dry_run=self._cap_dry_run_var.get(),
-            callback=lambda response: self._gui_call(self._cap_action_response, response),
-        )
-
-    def _cap_remove_upload(self):
-        upload = self._cap_selected_upload()
-        if upload:
-            self.upload_manager.delete_upload(upload["job_id"], callback=lambda response: self._gui_call(self._cap_action_response, response))
-
-    def _cap_action_response(self, response):
-        if not response.get("success"):
-            messagebox.showerror("CAP Action Failed", response.get("error") or "Unknown service error")
-        self._refresh_cap_tab()
 
     @staticmethod
-    def _cap_format_bytes(value):
+    def _cap_format_bytes(value, decimals=1):
         size = float(value or 0)
         for unit in ("B", "KiB", "MiB", "GiB", "TiB"):
             if size < 1024 or unit == "TiB":
-                return f"{size:.1f} {unit}"
-            size /= 1024
-
-    @staticmethod
-    def _cap_format_capture_size(value):
-        size = float(value or 0)
-        for unit in ("B", "KiB", "MiB", "GiB", "TiB"):
-            if size < 1024 or unit == "TiB":
-                return f"{size:.0f} {unit}"
+                return f"{size:.{decimals}f} {unit}"
             size /= 1024
 
     @staticmethod
@@ -5341,17 +4977,22 @@ class MEPGui:
                     status_frame, textvariable=self._vars[key], state="readonly", width=18
                 )
             entry.grid(row=summary_row, column=1, sticky="ew", padx=5, pady=2)
+        ttk.Button(
+            status_frame,
+            text="Refresh Presets",
+            command=self._rec_request_presets,
+        ).grid(row=0, column=2, rowspan=2, sticky="ns", padx=(0, 5), pady=2)
         ttk.Label(
             status_frame,
             text="Applied REC settings take effect on the next recording; running recorders are not reconfigured.",
             wraplength=455,
-        ).grid(row=2, column=0, columnspan=2, sticky="w", padx=5, pady=(4, 2))
+        ).grid(row=2, column=0, columnspan=3, sticky="w", padx=5, pady=(4, 2))
         ttk.Label(
             status_frame,
             textvariable=self._vars["rec_draft_error"],
             foreground="#a33a2b",
             wraplength=455,
-        ).grid(row=3, column=0, columnspan=2, sticky="w", padx=5, pady=(0, 5))
+        ).grid(row=3, column=0, columnspan=3, sticky="w", padx=5, pady=(0, 5))
 
         # ===== DIGITAL RF IQ =====
         drf_frame = ttk.LabelFrame(scrollable_frame, text="DigitalRF IQ")
@@ -7394,7 +7035,6 @@ class MEPGui:
             values = ()
             valid_sample_rates = False
         if not isinstance(response, dict) or not response.get("success") or not valid_sample_rates:
-            self._sample_rate_combo.configure(values=())
             if "REC" not in self._tabs_built:
                 logging.warning(
                     "REC: %s",
@@ -7413,6 +7053,7 @@ class MEPGui:
             logging.warning("REC: %s", model["error"])
             return
 
+        self._rec_presets_loaded = True
         current = self._vars["sample_rate_mhz"].get()
         self._sample_rate_combo.configure(values=values)
         self._rec_trace_busy = True

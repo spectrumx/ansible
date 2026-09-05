@@ -57,7 +57,7 @@ AFEControl
 |
 `-- afecontrol/data/*
 	`-- CaptureOrchestrator
-		`-- <capture>/data/gps_telemetry.csv
+		`-- <capture>/data/capture_telemetry.csv
 			`-- Capture-specific telemetry log
 ```
 

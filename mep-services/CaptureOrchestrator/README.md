@@ -106,25 +106,20 @@ The direct request interface remains available. For example, a request can
 provide only `freq_start_hz` and use the staged RX channel and sample rate.
 
 ```json
-{"task_name":"load_config","arguments":{"path":"/data/captures/example/capture_settings.json"}}
+{"task_name":"load_config","arguments":{"path":"/data/captures/example/data/capture_settings.json"}}
 ```
 
 ```json
 {"task_name":"start_rx","session_id":"rx-001","arguments":{"freq_start_hz":7000000000}}
 ```
 
-For every named local capture, the orchestrator writes two files under
-`/data/captures/<capture_name>` before recording begins:
-
-- `capture_settings.json`: the portable resolved configuration. It can be
-  loaded or saved through the normal configuration commands.
-- `capture_identity.json`: the local-only stable capture ID and creation time.
-  It is not a portable recipe and is never regenerated when recording resumes.
+For every named local capture, the orchestrator creates `data/` and
+`log_upload/`. It writes the portable resolved configuration to
+`data/capture_settings.json` before recording begins. The capture directory
+name is its local identity.
 
 An unnamed RX capture uses `/data/captures/preview`. Before recording starts,
 CaptureOrchestrator rotates and clears the existing `preview/data` directory,
 then configures RecorderControl to write the new preview there. The preview is
-temporary and does not receive a stable capture identity.
-
-SDS paths, remote identities, upload jobs, and upload manifests belong solely
-to UploadManager's SQLite database.
+temporary. UploadManager owns `log_upload/upload_status.json`; the contents of
+`data/` are the SDS payload.

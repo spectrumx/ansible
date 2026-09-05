@@ -53,7 +53,6 @@ CONJUGATE_POLICIES = {"auto", "force_on", "force_off"}
 RECORDER_CONFIG_DIR = "/opt/radiohound/docker/recorder/configs"
 CAPTURES_ROOT_DIR = Path("/data/captures")
 PREVIEW_DATA_DIR = CAPTURES_ROOT_DIR / "preview" / "data"
-CAPTURE_IDENTITY_FILENAME = "capture_identity.json"
 CAPTURE_SETTINGS_FILENAME = "capture_settings.json"
 
 COMMANDS = {
@@ -756,7 +755,7 @@ class CaptureTelemetryLogger:
 
             data_dir = Path(capture_dir) / "data"
             data_dir.mkdir(parents=True, exist_ok=True)
-            path = data_dir / "gps_telemetry.csv"
+            path = data_dir / "capture_telemetry.csv"
             header = []
             for stream, prefix in (("gps", "gnss"), ("mag", "mag"), ("imu", "imu"), ("hk", "hk")):
                 header.extend(f"{prefix}_{key}" for key in schema[stream])
@@ -868,7 +867,6 @@ class WorkflowState:
             "frequency_hz": None,
             "step_index": None,
             "step_count": None,
-            "capture_id": None,
             "capture_name": None,
             "error": None,
         }
@@ -966,7 +964,7 @@ class Rx:
                     raise ValueError("dwell must be positive")
                 self._dwell(dwell)
                 self.stop(session_id)
-            return {"state": self.state.get()["state"], "frequency_hz": frequency_hz, "capture_id": config.get("capture_id")}
+            return {"state": self.state.get()["state"], "frequency_hz": frequency_hz, "capture_name": config.get("capture_name")}
         except Exception as exc:
             try:
                 self.stop(session_id)
@@ -1028,7 +1026,7 @@ class Rx:
             try:
                 self.mqtt.command(RFSOC_COMMAND, "reset", session_id=session_id)
             finally:
-                self.state.set(state="idle", operation=None, signal_path=None, capture_id=None, capture_name=None, error=None)
+                self.state.set(state="idle", operation=None, signal_path=None, capture_name=None, error=None)
         return {"state": "idle"}
 
     def _configure_rx_frequency(self, frequency_hz, settings, session_id):
@@ -1084,7 +1082,6 @@ class Rx:
             frequency_hz=frequency_hz,
             step_index=0 if step_count else None,
             step_count=step_count,
-            capture_id=(settings or {}).get("capture_id"),
             capture_name=(settings or {}).get("capture_name"),
             conjugate_policy=(settings or {}).get("conjugate_policy"),
             apply_conjugate=(settings or {}).get("apply_conjugate"),
@@ -1189,25 +1186,13 @@ class CaptureOrchestrator:
         capture_name = resolved_rx.get("capture_name")
         if not capture_name:
             return resolved_rx
+        if Path(capture_name).name != capture_name or capture_name in {".", ".."}:
+            raise ValueError("capture name must be a non-empty basename")
         capture_root = CAPTURES_ROOT_DIR / capture_name
-        capture_root.mkdir(parents=True, exist_ok=True)
-        identity_path = capture_root / CAPTURE_IDENTITY_FILENAME
-        if identity_path.exists():
-            try:
-                identity = json.loads(identity_path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError) as exc:
-                raise RuntimeError(f"invalid capture identity: {identity_path}") from exc
-            if not isinstance(identity, dict) or not identity.get("capture_id"):
-                raise RuntimeError(f"capture identity is missing capture_id: {identity_path}")
-        else:
-            identity = {
-                "schema_version": 1,
-                "capture_id": str(uuid.uuid4()),
-                "created_at": time.time(),
-            }
-            self._write_json(identity_path, identity)
-
-        settings_path = capture_root / CAPTURE_SETTINGS_FILENAME
+        data_dir = capture_root / "data"
+        data_dir.mkdir(parents=True, exist_ok=True)
+        (capture_root / "log_upload").mkdir(exist_ok=True)
+        settings_path = data_dir / CAPTURE_SETTINGS_FILENAME
         capture_settings = resolved_rx.pop("capture_settings")
         if settings_path.exists():
             try:
@@ -1218,7 +1203,6 @@ class CaptureOrchestrator:
                 raise ValueError("capture settings differ; choose a new capture name")
         else:
             self._write_json(settings_path, capture_settings)
-        resolved_rx["capture_id"] = identity["capture_id"]
         resolved_rx["capture_dir"] = str(capture_root)
         return resolved_rx
 

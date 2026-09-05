@@ -28,21 +28,7 @@ STATUS_TOPIC = f"{SERVICE_NAME}/status"
 DATA_TOPIC = f"{SERVICE_NAME}/data"
 EVENT_TOPIC = f"{SERVICE_NAME}/event"
 CAPTURE_ORCHESTRATOR_STATUS_TOPIC = "captureorchestrator/status"
-UPLOAD_MANAGER_STATUS_TOPIC = "uploadmanager/status"
-CAPTURE_IDENTITY_FILENAME = "capture_identity.json"
 CAPTURE_SETTINGS_FILENAME = "capture_settings.json"
-ACTIVE_UPLOAD_STATES = {
-    "queued",
-    "scanning",
-    "authenticating",
-    "uploading",
-    "verifying",
-    "verification_pending",
-    "pause_requested",
-    "paused",
-    "waiting_for_retry",
-    "waiting_for_credentials",
-}
 COMMANDS = {
     "get_status": {
         "description": "Return the current local capture inventory summary.",
@@ -53,21 +39,21 @@ COMMANDS = {
         "arguments": {},
     },
     "get_capture": {
-        "description": "Return one managed local capture by stable ID.",
-        "arguments": {"capture_id": {"type": "string", "required": True}},
+        "description": "Return one local capture by name.",
+        "arguments": {"capture_name": {"type": "string", "required": True}},
     },
     "delete_capture": {
         "description": "Delete one local capture directory.",
-        "arguments": {"capture_id": {"type": "string", "required": True}},
+        "arguments": {"capture_name": {"type": "string", "required": True}},
     },
     "delete_preview": {
         "description": "Delete the reserved preview directory.",
         "arguments": {},
     },
     "rename_capture": {
-        "description": "Rename a local capture directory while preserving its stable identity.",
+        "description": "Rename a local capture directory.",
         "arguments": {
-            "capture_id": {"type": "string", "required": True},
+            "capture_name": {"type": "string", "required": True},
             "new_name": {"type": "string", "required": True},
         },
     },
@@ -114,11 +100,6 @@ class ArchiveManagerService:
         self._workers_started = False
         self._active_capture_path = None
         self._active_capture_name = None
-        self._active_capture_id = None
-        self._active_upload_ids = set()
-        self._cancelling_upload_ids = set()
-        self._capture_status_received = False
-        self._upload_status_received = False
         self._debounce_timer = None
 
         self.client = mqtt.Client(
@@ -239,10 +220,7 @@ class ArchiveManagerService:
         if capture_name.startswith("."):
             return
         is_capture_root_event = len(relative.parts) == 1
-        is_capture_metadata = relative.name in {
-            CAPTURE_IDENTITY_FILENAME,
-            CAPTURE_SETTINGS_FILENAME,
-        }
+        is_capture_metadata = relative.name == CAPTURE_SETTINGS_FILENAME
         if (
             "IN_CREATE" in type_names
             and "IN_ISDIR" not in type_names
@@ -295,13 +273,9 @@ class ArchiveManagerService:
 
     def _scan_capture(self, capture_path: Path):
         settings = self._read_capture_settings(capture_path)
-        identity = self._read_capture_identity(capture_path)
         issues = []
-        if identity.get("error"):
-            issues.append(identity.pop("error"))
         if settings.get("error"):
             issues.append(settings.pop("error"))
-        capture_id = identity.get("capture_id")
         file_count = 0
         size_bytes = 0
         first_seen = None
@@ -326,11 +300,8 @@ class ArchiveManagerService:
             pass
 
         return {
-            "capture_id": capture_id,
             "name": capture_path.name,
             "path": str(capture_path),
-            "state": "managed" if capture_id else "legacy",
-            "identity": identity,
             "settings": settings,
             "issues": issues,
             "file_count": file_count,
@@ -371,10 +342,7 @@ class ArchiveManagerService:
                         return
                     del self._inventory[capture_name]
                     event_type = "capture_removed"
-                    event_data = {
-                        "capture_id": previous["capture_id"],
-                        "name": capture_name,
-                    }
+                    event_data = {"name": capture_name}
                 else:
                     self._inventory[capture_name] = current
                     event_type = (
@@ -418,26 +386,19 @@ class ArchiveManagerService:
             self._publish(EVENT_TOPIC, event, retain=False)
             self._publish(STATUS_TOPIC, status, retain=True)
 
-    def delete_capture(self, capture_id):
+    def delete_capture(self, capture_name):
         with self._publication_lock:
             with self._state_lock:
-                name, capture = self._capture_by_id_locked(capture_id)
-                if capture.get("state") != "managed" or not capture.get("capture_id"):
-                    raise ValueError("legacy captures cannot be modified")
-                if capture["capture_id"] == self._active_capture_id:
-                    raise ValueError("cannot delete a capture while it is recording")
-
-                path = (self.data_root / name).resolve()
+                capture_name = self._validate_capture_name(capture_name)
+                if capture_name not in self._inventory:
+                    raise ValueError(f"capture not found: {capture_name!r}")
+                path = (self.data_root / capture_name).resolve()
                 if path.parent != self.data_root or not path.is_dir() or path.is_symlink():
                     raise ValueError("refusing to delete a path outside the capture root")
 
                 shutil.rmtree(path)
-                del self._inventory[name]
-                result = {
-                    "name": name,
-                    "capture_id": capture["capture_id"],
-                    "deleted": True,
-                }
+                del self._inventory[capture_name]
+                result = {"name": capture_name, "deleted": True}
                 publications = self._record_inventory_change_locked(
                     "capture_deleted", result
                 )
@@ -450,8 +411,6 @@ class ArchiveManagerService:
                 capture = self._inventory.get("preview")
                 if capture is None:
                     raise ValueError("preview capture not found")
-                if self._active_capture_name == "preview":
-                    raise ValueError("cannot delete preview while it is recording")
 
                 path = (self.data_root / "preview").resolve()
                 if path.parent != self.data_root or not path.is_dir() or path.is_symlink():
@@ -459,41 +418,39 @@ class ArchiveManagerService:
 
                 shutil.rmtree(path)
                 del self._inventory["preview"]
-                result = {"name": "preview", "capture_id": None, "deleted": True}
+                result = {"name": "preview", "deleted": True}
                 publications = self._record_inventory_change_locked(
                     "capture_deleted", result
                 )
             self._publish_inventory_publications(publications)
         return result
 
-    def rename_capture(self, capture_id, new_name):
+    def rename_capture(self, capture_name, new_name):
+        capture_name = self._validate_capture_name(capture_name)
         new_name = self._validate_capture_name(new_name)
 
         with self._publication_lock:
             with self._state_lock:
-                old_name, capture = self._capture_by_id_locked(capture_id)
-                self._require_inactive_capture(capture)
-                if old_name == new_name:
+                capture = self._inventory.get(capture_name)
+                if capture is None:
+                    raise ValueError(f"capture not found: {capture_name!r}")
+                if capture_name == new_name:
                     return self._copy(capture)
                 if (self.data_root / new_name).exists():
                     raise ValueError(f"destination already exists: {new_name!r}")
 
-                source = (self.data_root / old_name).resolve()
+                source = (self.data_root / capture_name).resolve()
                 target = (self.data_root / new_name).resolve()
                 if source.parent != self.data_root or source.is_symlink():
                     raise ValueError("refusing to rename a path outside the capture root")
 
                 shutil.move(str(source), str(target))
                 renamed = self._scan_capture(target)
-                if renamed.get("capture_id") != capture["capture_id"]:
-                    shutil.move(str(target), str(source))
-                    raise RuntimeError("capture identity changed during rename")
-                del self._inventory[old_name]
+                del self._inventory[capture_name]
                 self._inventory[new_name] = renamed
                 result = {
-                    "old_name": old_name,
+                    "old_name": capture_name,
                     "new_name": new_name,
-                    "capture_id": capture["capture_id"],
                     "renamed": True,
                 }
                 publications = self._record_inventory_change_locked(
@@ -517,13 +474,13 @@ class ArchiveManagerService:
             self._reconcile()
             result = {"captures": self._snapshot()}
         elif task_name == "get_capture":
-            result = self._capture_by_id(arguments.get("capture_id"))
+            result = self._capture_by_name(arguments.get("capture_name"))
         elif task_name == "delete_capture":
-            result = self.delete_capture(arguments.get("capture_id"))
+            result = self.delete_capture(arguments.get("capture_name"))
         elif task_name == "delete_preview":
             result = self.delete_preview()
         elif task_name == "rename_capture":
-            result = self.rename_capture(arguments.get("capture_id"), arguments.get("new_name"))
+            result = self.rename_capture(arguments.get("capture_name"), arguments.get("new_name"))
         else:
             raise ValueError(f"unsupported task_name: {task_name!r}")
 
@@ -566,7 +523,6 @@ class ArchiveManagerService:
         for topic in (
             COMMAND_TOPIC,
             CAPTURE_ORCHESTRATOR_STATUS_TOPIC,
-            UPLOAD_MANAGER_STATUS_TOPIC,
         ):
             result, _ = client.subscribe(topic, qos=1)
             if result != mqtt.MQTT_ERR_SUCCESS:
@@ -600,22 +556,16 @@ class ArchiveManagerService:
             return
         if message.topic == CAPTURE_ORCHESTRATOR_STATUS_TOPIC:
             self._update_capture_activity(payload)
-        elif message.topic == UPLOAD_MANAGER_STATUS_TOPIC:
-            self._update_upload_activity(payload)
 
     def _update_capture_activity(self, payload):
         rx = payload.get("rx") if isinstance(payload, dict) else None
         is_active = isinstance(rx, dict) and rx.get("state") in {"starting", "running"}
-        capture_id = rx.get("capture_id") if is_active else None
         capture_name = rx.get("capture_name") if is_active else None
         if is_active and not capture_name:
             capture_name = "preview"
         with self._state_lock:
             previous_capture_name = self._active_capture_name
-            previous_capture_id = self._active_capture_id
-            self._active_capture_id = capture_id
             self._active_capture_name = capture_name
-            self._capture_status_received = True
             self._active_capture_path = (
                 str(self.data_root / capture_name)
                 if isinstance(capture_name, str)
@@ -623,36 +573,13 @@ class ArchiveManagerService:
             )
         refresh_names = set()
         if isinstance(previous_capture_name, str) and previous_capture_name:
-            if previous_capture_name != capture_name or previous_capture_id != capture_id:
+            if previous_capture_name != capture_name:
                 refresh_names.add(previous_capture_name)
         if isinstance(capture_name, str) and capture_name:
-            if capture_name != previous_capture_name or capture_id != previous_capture_id:
+            if capture_name != previous_capture_name:
                 refresh_names.add(capture_name)
         for name in refresh_names:
             self._refresh_capture(name)
-
-    def _update_upload_activity(self, payload):
-        uploads = payload.get("uploads") if isinstance(payload, dict) else None
-        if not isinstance(uploads, list):
-            return
-        active_ids = {
-            str(upload["capture_id"])
-            for upload in uploads
-            if isinstance(upload, dict)
-            and upload.get("state") in ACTIVE_UPLOAD_STATES
-            and upload.get("capture_id")
-        }
-        cancelling_ids = {
-            str(upload["capture_id"])
-            for upload in uploads
-            if isinstance(upload, dict)
-            and upload.get("state") == "cancelling"
-            and upload.get("capture_id")
-        }
-        with self._state_lock:
-            self._active_upload_ids = active_ids
-            self._cancelling_upload_ids = cancelling_ids
-            self._upload_status_received = True
 
     def _publish(self, topic, payload, retain):
         result = self.client.publish(
@@ -708,34 +635,6 @@ class ArchiveManagerService:
                 raise ValueError(f"capture not found: {name!r}")
             return self._copy(capture)
 
-    def _capture_by_id(self, capture_id):
-        with self._state_lock:
-            _, capture = self._capture_by_id_locked(capture_id)
-            return self._copy(capture)
-
-    def _capture_by_id_locked(self, capture_id):
-        capture_id = str(capture_id or "")
-        if not capture_id:
-            raise ValueError("capture_id is required")
-        for name, capture in self._inventory.items():
-            if capture.get("capture_id") == capture_id:
-                return name, capture
-        raise ValueError(f"capture not found: {capture_id!r}")
-
-    def _require_inactive_capture(self, capture, allow_cancelling_upload=False):
-        if capture.get("state") != "managed" or not capture.get("capture_id"):
-            raise ValueError("legacy captures cannot be modified")
-        if not self._capture_status_received or not self._upload_status_received:
-            raise RuntimeError("capture activity status is not available")
-        capture_id = capture["capture_id"]
-        if capture_id == self._active_capture_id:
-            raise ValueError("cannot modify a capture while it is recording")
-        if capture_id in self._active_upload_ids or (
-            capture_id in self._cancelling_upload_ids
-            and not allow_cancelling_upload
-        ):
-            raise ValueError("cannot modify a capture while it has an active upload")
-
     @staticmethod
     def _validate_capture_name(name):
         if not isinstance(name, str) or not name or Path(name).name != name:
@@ -744,7 +643,7 @@ class ArchiveManagerService:
 
     @staticmethod
     def _read_capture_settings(path):
-        settings_path = path / CAPTURE_SETTINGS_FILENAME
+        settings_path = path / "data" / CAPTURE_SETTINGS_FILENAME
         if not settings_path.is_file():
             return {}
         try:
@@ -754,19 +653,6 @@ class ArchiveManagerService:
         if not isinstance(settings, dict):
             return {"error": "settings must be an object"}
         return settings
-
-    @staticmethod
-    def _read_capture_identity(path):
-        metadata_path = path / CAPTURE_IDENTITY_FILENAME
-        if not metadata_path.is_file():
-            return {"error": "capture identity is missing"}
-        try:
-            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            return {"error": str(exc)}
-        if not isinstance(metadata, dict) or not metadata.get("capture_id"):
-            return {"error": "capture identity must include capture_id"}
-        return metadata
 
     @staticmethod
     def _event_payload(event_type, status_data):
