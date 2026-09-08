@@ -5,7 +5,7 @@ Wants=mosquitto.service
 
 [Service]
 Type=simple
-ExecStart=/opt/radiohound/python313/bin/python -B /opt/ansible/mep-services/TunerControl/src/tuner_control.py
+ExecStart=/opt/radiohound/python313/bin/python -B /opt/ansible/mep-services/TunerControl/tuner_control.py
 Environment=PYTHONUNBUFFERED=true
 Restart=always
 RestartSec=10

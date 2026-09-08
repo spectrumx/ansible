@@ -127,7 +127,7 @@ class ServiceManager:
             "show",
             unit,
             "--no-pager",
-            "--property=Id,Description,LoadState,ActiveState,SubState,UnitFileState,MainPID,ExecMainStatus,StateChangeTimestamp",
+            "--property=Id,Description,FragmentPath,LoadState,ActiveState,SubState,UnitFileState,MainPID,ExecMainStatus,StateChangeTimestamp",
         ], timeout=10.0)
         fields = {}
         for line in result.stdout.splitlines():
@@ -137,6 +137,7 @@ class ServiceManager:
         return {
             "service": unit,
             "description": fields.get("Description") or unit,
+            "fragment_path": fields.get("FragmentPath") or None,
             "load_state": fields.get("LoadState") or "unknown",
             "active_state": fields.get("ActiveState") or "unknown",
             "sub_state": fields.get("SubState") or "unknown",

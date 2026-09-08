@@ -480,32 +480,41 @@ class TunerClient:
         self.bus = message_bus
 
     def _command(self, task_name: str, arguments=None):
-        return self.bus.publish_command(
-            bus.TUNER_COMMAND_TOPIC,
-            {"task_name": task_name, "arguments": arguments or {}},
-        )
+        payload = {"session_id": f"tuner-{uuid.uuid4().hex}", "task_name": task_name, "arguments": arguments or {}}
+        return self.bus.publish_command(bus.TUNER_COMMAND_TOPIC, payload)
 
-    def initialize(self, force_tuner: Optional[str] = None):
-        arguments = {"force_tuner": force_tuner} if force_tuner else {}
-        return self._command("init_tuner", arguments)
+    def initialize(self):
+        return self._command("initialize")
+
+    def discover(self):
+        return self._command("discover")
 
     def set_frequency(self, frequency_mhz: float):
-        return self._command("set_freq", {"freq_mhz": frequency_mhz})
+        return self._command("set_frequency", {"frequency_mhz": frequency_mhz})
 
     def get_frequency(self):
-        return self._command("get_freq")
+        return self._command("get_frequency")
 
     def set_power(self, power_dbm: float):
-        return self._command("set_power", {"pwr_dbm": power_dbm})
+        return self._command("set_power", {"power_dbm": power_dbm})
 
     def get_power(self):
         return self._command("get_power")
 
-    def check_lock(self):
+    def get_lock_status(self):
         return self._command("get_lock_status")
 
-    def restart(self):
-        return self._command("restart_tuner")
+    def set_external_reference(self, enabled: bool):
+        return self._command("set_external_reference", {"enabled": bool(enabled)})
+
+    def get_external_reference(self):
+        return self._command("get_external_reference")
+
+    def set_reference_frequency(self, frequency_mhz: float):
+        return self._command("set_reference_frequency", {"frequency_mhz": frequency_mhz})
+
+    def get_reference_frequency(self):
+        return self._command("get_reference_frequency")
 
     def status(self):
         return self._command("status")
@@ -516,6 +525,12 @@ class TunerClient:
 
     def on_status(self, callback):
         self.bus.on_status(bus.TUNER_STATUS_TOPIC, callback)
+
+    def on_announce(self, callback):
+        self.bus.on_status(bus.TUNER_ANNOUNCE_TOPIC, callback)
+
+    def on_event(self, callback):
+        self.bus.on_status(bus.TUNER_EVENT_TOPIC, callback)
 
     def on_response(self, callback):
         self.bus.on_status(bus.TUNER_RESPONSE_TOPIC, callback)

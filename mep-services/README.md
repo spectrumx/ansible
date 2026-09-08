@@ -13,7 +13,7 @@ MQTT root.
 | Ringbuffer | `Ringbuffer/ringbuffer.py` | `ringbuffer.service` | `ringbuffer/` |
 | CaptureOrchestrator | `CaptureOrchestrator/capture_orchestrator.py` | `capture-orchestrator.service` | `captureorchestrator/` |
 | AFEControl | `AFEControl/afe_control.py` | `afe-control.service` | `afecontrol/` |
-| TunerControl | `TunerControl/src/tuner_control.py` | `tuner-control.service` | `tunercontrol/` |
+| TunerControl | `TunerControl/tuner_control.py` | `tuner-control.service` | `tunercontrol/` |
 | MEPGui | `MEPGui/mep_gui.py` | none | MQTT client only |
 
 The service source is installed at `/opt/ansible/mep-services`.

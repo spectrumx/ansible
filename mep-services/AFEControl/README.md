@@ -32,7 +32,9 @@ The MQTT API exposes semantic AFE operations, not arbitrary GPSD commands or
 arbitrary UART writes. A bounded diagnostic lease can publish the existing raw
 stream without retaining messages. Leases expire after at most 60 seconds and
 are cleared by MQTT or GPSD reconnection; the default `gnss` mode excludes
-high-rate `$PMIT...` telemetry, while explicit `all` mode includes every line.
+high-rate `$PMIT...` telemetry, while explicit `pmit` mode selects only the
+proprietary lines and `all` mode includes every line. The default diagnostic
+mode is `all`.
 
 AFEControl stages the standard NMEA sentences belonging to one GNSS epoch. A
 distinct RMC date/time starts the next epoch and atomically commits the completed

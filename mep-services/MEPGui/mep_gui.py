@@ -280,6 +280,7 @@ class MEPGui:
         # DockerManager client is constructed after the shared MQTT bus.
         self.docker = None
         self._docker_suppress_tree_stream = False
+        self._service_journal_user_paused = False
         
         # RFSoC monitoring
         self._monitor_rfsoc_tlm = None
@@ -474,8 +475,9 @@ class MEPGui:
         self._gui_call(self._refresh_status_grid)
 
     def _update_tuner_selection(self, data: dict):
-        tuner_data = data.get("tuner") if isinstance(data, dict) else None
-        tuner_name = tuner_data.get("name") if isinstance(tuner_data, dict) else None
+        tuner_name = data.get("name") if isinstance(data, dict) else None
+        if not tuner_name and isinstance(data, dict):
+            tuner_name = data.get("backend")
         self._advertised_tuner = str(tuner_name).upper() if tuner_name else None
 
         tuner_selection = self._vars.get("tuner_selection")
@@ -496,6 +498,7 @@ class MEPGui:
         logging.info(f"AFE: {state}")
         self._on_afe_logging_response(data)
         self._on_afe_polling_response(data)
+        self._gui_call(self._afe_apply_state, data)
         self._gui_call(self._refresh_status_grid)
 
     def _on_gnss(self, data: dict):
@@ -865,7 +868,7 @@ class MEPGui:
     def _tlm_start_raw_stream(self):
         self.mep.afe.start_raw_stream(
             duration_s=float(self._vars["tlm_raw_duration"].get()),
-            mode=self._vars["tlm_raw_mode"].get(),
+            mode=self._vars["tlm_raw_mode"].get().lower(),
         )
 
     def _tlm_stop_raw_stream(self):
@@ -1178,10 +1181,8 @@ class MEPGui:
 
         tuner_status = self.mep.tuner.get_status()
         if tuner_status:
-            tuner_data = tuner_status.get("tuner")
-            tuner_data = tuner_data if isinstance(tuner_data, dict) else {}
-            tuner_name = tuner_data.get("name") or "—"
-            lo_val = self._safe_float(tuner_data.get("freq_mhz"))
+            tuner_name = tuner_status.get("name") or tuner_status.get("backend") or "—"
+            lo_val = self._safe_float(tuner_status.get("frequency_mhz"))
             lo_txt = f"LO={lo_val:.1f}" if lo_val is not None else "LO=—"
             t_state = str(tuner_status.get("state", "unknown")).lower()
             level = "red" if t_state in {"error", "offline", "disconnected"} else "green"
@@ -2245,7 +2246,7 @@ class MEPGui:
     def _build_spec_tab(self, frame: ttk.Frame):
         """SPEC tab: live FFT line plot and rolling waterfall from MQTT spectrum frames."""
         frame.columnconfigure(0, weight=1)
-        frame.rowconfigure(2, weight=1)
+        frame.rowconfigure(3, weight=1)
         frame.rowconfigure(3, weight=1)
 
         cfg_f = ttk.LabelFrame(frame, text="Stream")
@@ -3031,17 +3032,23 @@ class MEPGui:
         except (tk.TclError, AttributeError):
             return True
 
-    def _copy_widget_text(self, widget):
+    def _widget_copy_text(self, widget):
         try:
             if isinstance(widget, (tk.Text, scrolledtext.ScrolledText)):
                 ranges = widget.tag_ranges("sel")
-                text = widget.get(ranges[0], ranges[1]) if len(ranges) >= 2 else widget.get("1.0", "end-1c")
+                return widget.get(ranges[0], ranges[1]) if len(ranges) >= 2 else widget.get("1.0", "end-1c")
             else:
                 try:
-                    text = widget.selection_get() if widget.selection_present() else widget.get()
+                    return widget.selection_get() if widget.selection_present() else widget.get()
                 except (tk.TclError, AttributeError):
-                    text = widget.get()
+                    return widget.get()
         except (tk.TclError, AttributeError):
+            return ""
+
+    def _copy_widget_text(self, widget, text=None):
+        if text is None:
+            text = self._widget_copy_text(widget)
+        if not text:
             return
         self.root.clipboard_clear()
         self.root.clipboard_append(text)
@@ -3066,12 +3073,15 @@ class MEPGui:
     def _bind_copy_menu(self, widget, strvar=None, allow_paste=True):
         """Attach right-click Copy (and optionally Paste) + Ctrl+C/V for Entry/Text widgets."""
         menu = tk.Menu(widget, tearoff=0)
+        popup_text = {"value": None}
 
         def _popup_menu(e):
+            # Capture before tk_popup transfers focus and potentially clears the selection.
+            popup_text["value"] = self._widget_copy_text(widget)
             menu.tk_popup(e.x_root, e.y_root)
             return "break"
 
-        def _copy():
+        def _copy(use_popup_selection=False):
             if isinstance(widget, (tk.Label, ttk.Label)):
                 try:
                     variable_name = str(widget.cget("textvariable"))
@@ -3081,7 +3091,17 @@ class MEPGui:
                 except Exception:
                     return
             else:
-                self._copy_widget_text(widget)
+                text = None
+                if isinstance(widget, (tk.Text, scrolledtext.ScrolledText)):
+                    try:
+                        ranges = widget.tag_ranges("sel")
+                        if len(ranges) >= 2:
+                            text = widget.get(ranges[0], ranges[1])
+                    except tk.TclError:
+                        pass
+                if not text and use_popup_selection:
+                    text = popup_text["value"]
+                self._copy_widget_text(widget, text)
 
         def _paste():
             self._paste_widget_text(widget)
@@ -3091,7 +3111,7 @@ class MEPGui:
                 except (tk.TclError, AttributeError):
                     pass
 
-        menu.add_command(label="Copy", command=_copy)
+        menu.add_command(label="Copy", command=lambda: _copy(use_popup_selection=True))
         if allow_paste:
             menu.add_command(label="Paste", command=_paste)
         widget.bind("<Button-3>", _popup_menu)
@@ -4290,8 +4310,8 @@ class MEPGui:
         )
         self._tun_lock_entry.grid(row=2, column=1, sticky="ew", padx=5, pady=2)
         self._bind_copy_menu(self._tun_lock_entry, self._vars["tun_lock_status"])
-        ttk.Button(sum_f, text="Get", command=self._tun_check_lock).grid(
-            row=2, column=2, padx=(2, 5), pady=2, sticky="e")
+        _lock_get_btn = ttk.Button(sum_f, text="Get", command=self._tun_check_lock)
+        _lock_get_btn.grid(row=2, column=2, padx=(2, 5), pady=2, sticky="e")
 
         # Status dump
         st_f = ttk.LabelFrame(frame, text="Tuner Status (full)")
@@ -4341,17 +4361,18 @@ class MEPGui:
         ttk.Separator(ctrl_f, orient="horizontal").grid(
             row=3, column=0, columnspan=4, sticky="ew", padx=4, pady=2)
 
-        ttk.Button(ctrl_f, text="Init Tuner",
-                   command=self._tun_init).grid(
+        ttk.Button(ctrl_f, text="Discover Tuners",
+                   command=self._tun_discover).grid(
             row=4, column=0, columnspan=4, padx=4, pady=3, sticky="ew")
-        ttk.Button(ctrl_f, text="Restart Tuner",
-                   command=self._tun_restart).grid(
+        ttk.Button(ctrl_f, text="Initialize Tuner",
+                   command=self._tun_init).grid(
             row=5, column=0, columnspan=4, padx=4, pady=3, sticky="ew")
-        ttk.Button(ctrl_f, text="Publish: Get Status",
+        ttk.Button(ctrl_f, text="Get Status",
                    command=self._tun_send_status).grid(
             row=6, column=0, columnspan=4, padx=4, pady=3, sticky="ew")
 
-        self._valon_only_widgets = [_pw_entry, _pw_set_btn, _pw_get_btn]
+        self._tuner_power_widgets = [_pw_entry, _pw_set_btn, _pw_get_btn]
+        self._tuner_lock_widgets = [_lock_get_btn]
         self._vars["tun_name"].trace_add(
             "write", lambda *_: self._tun_update_capability_buttons())
         self._tun_update_capability_buttons()
@@ -4361,7 +4382,7 @@ class MEPGui:
 
         # Register tab-specific MQTT → UI. Emit-cached fires inline if data exists.
         # Periodic status (state/tuner) arrives on the status topic; command
-        # replies (get_lock_status, get_freq, get_power) arrive on the dedicated
+        # replies (get_lock_status, get_frequency, get_power) arrive on the dedicated
         # response topic and carry task_name/value.
     # ---- TLM tab ---- #
 
@@ -4418,7 +4439,7 @@ class MEPGui:
         details_nb.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=5, pady=(2, 5))
 
         fields_tab = ttk.Frame(details_nb, padding=4)
-        details_nb.add(fields_tab, text="GNSS Fields")
+        details_nb.add(fields_tab, text="GNSS")
         fields_tab.columnconfigure(0, weight=1)
         fields_tab.rowconfigure(0, weight=1)
         self._tlm_gps_fields = ttk.Treeview(
@@ -4441,9 +4462,8 @@ class MEPGui:
         self._tlm_gps_field_units = {}
 
         gpsd_tab = ttk.Frame(details_nb, padding=4)
-        details_nb.add(gpsd_tab, text="GPSD / Raw")
+        details_nb.add(gpsd_tab, text="GPSD")
         gpsd_tab.columnconfigure(0, weight=1)
-        gpsd_tab.rowconfigure(2, weight=1)
 
         status_f = ttk.Frame(gpsd_tab)
         status_f.grid(row=0, column=0, sticky="ew")
@@ -4466,43 +4486,52 @@ class MEPGui:
             ttk.Label(status_f, text=label).grid(row=row, column=pair * 2, sticky="w", padx=(2, 4), pady=1)
             _ro_value(status_f, row, pair * 2 + 1, key, width=15)
 
-        raw_controls = ttk.Frame(gpsd_tab)
-        raw_controls.grid(row=1, column=0, sticky="ew", pady=(3, 2))
+        stream_tab = ttk.Frame(details_nb, padding=4)
+        details_nb.add(stream_tab, text="Stream")
+        stream_tab.columnconfigure(0, weight=1)
+        stream_tab.rowconfigure(1, weight=1)
+
+        raw_controls = ttk.Frame(stream_tab)
+        raw_controls.grid(row=0, column=0, sticky="ew", pady=(3, 2))
         raw_controls.columnconfigure(0, weight=1)
         self._vars["tlm_raw_state"] = tk.StringVar(value="stopped")
-        self._vars["tlm_raw_mode"] = tk.StringVar(value="gnss")
-        self._vars["tlm_raw_duration"] = tk.DoubleVar(value=10.0)
+        self._vars["tlm_raw_mode"] = tk.StringVar(value="All")
+        self._vars["tlm_raw_duration"] = tk.IntVar(value=10)
         ttk.Label(raw_controls, textvariable=self._vars["tlm_raw_state"], foreground="grey").grid(
             row=0, column=0, sticky="w", padx=(2, 6)
         )
         ttk.Combobox(raw_controls, textvariable=self._vars["tlm_raw_mode"],
-                     values=("gnss", "all"), state="readonly", width=6).grid(
+                     values=("All", "GNSS", "PMIT"), state="readonly", width=5).grid(
             row=0, column=1, padx=2
         )
+        ttk.Label(raw_controls, text="Lease (s)").grid(row=0, column=2, padx=(8, 2))
         ttk.Spinbox(raw_controls, textvariable=self._vars["tlm_raw_duration"],
-                    from_=1, to=60, increment=1, width=5).grid(row=0, column=2, padx=2)
-        ttk.Label(raw_controls, text="s").grid(row=0, column=3, sticky="w")
-        ttk.Button(raw_controls, text="Start", command=self._tlm_start_raw_stream).grid(
+                    from_=1, to=60, increment=1, width=2).grid(row=0, column=3, padx=2)
+        ttk.Button(raw_controls, text="Start", width=5,
+                   command=self._tlm_start_raw_stream).grid(
             row=0, column=4, padx=(5, 2)
         )
-        ttk.Button(raw_controls, text="Stop", command=self._tlm_stop_raw_stream).grid(
+        ttk.Button(raw_controls, text="Stop", width=5,
+                   command=self._tlm_stop_raw_stream).grid(
             row=0, column=5, padx=2
         )
-        ttk.Button(raw_controls, text="Clear",
+        ttk.Button(raw_controls, text="Clear", width=5,
                    command=lambda: self._tlm_raw_text.delete("1.0", "end")).grid(
             row=0, column=6, padx=(2, 0)
         )
 
-        self._tlm_raw_text = tk.Text(gpsd_tab, height=6, wrap="none", font=("TkFixedFont", 9))
-        raw_scroll = ttk.Scrollbar(gpsd_tab, orient="vertical", command=self._tlm_raw_text.yview)
+        self._tlm_raw_text = tk.Text(
+            stream_tab, height=6, wrap="none", font=("TkFixedFont", 9), exportselection=False
+        )
+        raw_scroll = ttk.Scrollbar(stream_tab, orient="vertical", command=self._tlm_raw_text.yview)
         self._tlm_raw_text.configure(yscrollcommand=raw_scroll.set)
-        self._tlm_raw_text.grid(row=2, column=0, sticky="nsew")
-        raw_scroll.grid(row=2, column=1, sticky="ns")
+        self._tlm_raw_text.grid(row=1, column=0, sticky="nsew")
+        raw_scroll.grid(row=1, column=1, sticky="ns")
         self._tlm_raw_text.bind(
             "<Key>",
             lambda event: None if (event.state & 0x4 and event.keysym in ("c", "C", "a", "A")) else "break",
         )
-        self._bind_copy_menu(self._tlm_raw_text)
+        self._bind_copy_menu(self._tlm_raw_text, allow_paste=False)
 
         self._tlm_gps_update(self._tlm_latest_gps)
         self._tlm_gpsd_update(self._tlm_latest_gpsd)
@@ -4622,6 +4651,9 @@ class MEPGui:
                    command=self._tlm_get_logging).grid(row=4, column=2, padx=2, pady=2)
         ttk.Button(log_f, text="Set", width=8,
                    command=self._tlm_set_logging).grid(row=4, column=3, padx=(2, 5), pady=2)
+
+        # Status may have arrived before this lazily-built tab existed.
+        self._afe_apply_state(self.mep.afe.get_status())
 
     # ---- AFE tab ---- #
 
@@ -5377,14 +5409,14 @@ class MEPGui:
 
     def _afe_apply_state(self, data: dict):
         """Update all AFE widgets from the client's register status stream."""
-        params = data.get("params", {})
+        params = data.get("parameters", data.get("params", {}))
         if isinstance(params, dict):
             imu_params = params.get("imu", {})
             if isinstance(imu_params, dict):
                 self._set_var("tlm_imu_acc_odr", imu_params.get("acc_odr", "—"))
                 self._set_var("tlm_imu_gyr_odr", imu_params.get("gyr_odr", "—"))
 
-            mag_params = params.get("magnetometer", {})
+            mag_params = params.get("mag", params.get("magnetometer", {}))
             if isinstance(mag_params, dict):
                 self._set_var("tlm_mag_ccr", mag_params.get("ccr", "—"))
                 self._set_var("tlm_mag_updr", mag_params.get("updr", "—"))
@@ -5533,6 +5565,39 @@ class MEPGui:
             except Exception:
                 pass
 
+    def _service_selected_service(self):
+        tree = getattr(self, "_service_services_tree", None)
+        manager = getattr(self, "service_manager", None)
+        if tree is None or manager is None:
+            return None
+        selected = [service for service in tree.selection() if service in manager.services]
+        return selected[0] if selected else None
+
+    def _service_apply_selected_service(self):
+        service = self._service_selected_service()
+        row = self.service_manager.services.get(service, {}) if service else {}
+        path = row.get("fragment_path")
+        service_text = f"{service}  ({path})" if service and path else (service or "—")
+        self._vars["service_selected_name"].set(service_text)
+        self._vars["service_selected_state"].set(row.get("active_state") or "—")
+        self._vars["service_selected_substate"].set(row.get("sub_state") or "—")
+        self._vars["service_selected_install"].set(row.get("unit_file_state") or "—")
+
+    def _service_preview_command(self, action: str):
+        services = self._service_action_targets()
+        if not services:
+            return "Select at least one service or choose All"
+        return "systemctl " + action + " " + " ".join(services)
+
+    def _service_set_command_preview(self, text: str = ""):
+        self._vars["service_cmd_preview"].set(
+            text or "Hover over an action to preview the systemctl command"
+        )
+
+    def _service_bind_command_preview(self, widget, action: str):
+        widget.bind("<Enter>", lambda _e: self._service_set_command_preview(self._service_preview_command(action)))
+        widget.bind("<Leave>", lambda _e: self._service_set_command_preview())
+
     def _service_refresh_status_async(self):
         manager = getattr(self, "service_manager", None)
         if manager is None:
@@ -5563,10 +5628,8 @@ class MEPGui:
         for index, service in enumerate(manager.service_names):
             row = manager.services.get(service, {})
             values = (
-                service,
+                service.removesuffix(".service"),
                 row.get("active_state", "—"),
-                row.get("sub_state", "—"),
-                row.get("unit_file_state", "—"),
                 row.get("main_pid", "—"),
                 row.get("description", "—"),
             )
@@ -5581,6 +5644,8 @@ class MEPGui:
             if iid not in desired_ids:
                 tree.delete(iid)
 
+        self._service_apply_selected_service()
+
     def _service_selected_services(self) -> list[str]:
         manager = getattr(self, "service_manager", None)
         tree = getattr(self, "_service_services_tree", None)
@@ -5590,7 +5655,14 @@ class MEPGui:
 
     def _service_on_tree_select(self, _event=None):
         manager = getattr(self, "service_manager", None)
-        if manager is None or not manager.log_busy:
+        if manager is None:
+            return
+        self._service_apply_selected_service()
+        if not self._service_selected_services():
+            return
+        if not manager.log_busy:
+            if not self._service_journal_user_paused:
+                self._service_stream_start()
             return
         if self._vars.get("service_log_mode", tk.StringVar(value="selected")).get() == "selected":
             self._service_stream_start(restart=True)
@@ -5684,6 +5756,7 @@ class MEPGui:
         manager = getattr(self, "service_manager", None)
         if manager is None:
             return
+        self._service_journal_user_paused = True
         if manager.log_busy:
             manager.stream_stop()
         else:
@@ -5694,6 +5767,7 @@ class MEPGui:
         manager = getattr(self, "service_manager", None)
         if manager is None:
             return
+        self._service_journal_user_paused = False
         if not manager.log_busy:
             self._service_stream_start()
             return
@@ -5739,11 +5813,15 @@ class MEPGui:
     def _build_service_tab(self, frame: ttk.Frame):
         """SVC tab: systemd unit status, journal streams, and service controls."""
         frame.columnconfigure(0, weight=1)
-        frame.rowconfigure(2, weight=1)
+        frame.rowconfigure(3, weight=1)
 
         self._vars["service_manager_status"] = tk.StringVar(value="unknown")
         self._vars["service_services_summary"] = tk.StringVar(value="0/0")
         self._vars["service_last_refresh"] = tk.StringVar(value="never")
+        self._vars["service_selected_name"] = tk.StringVar(value="—")
+        self._vars["service_selected_state"] = tk.StringVar(value="—")
+        self._vars["service_selected_substate"] = tk.StringVar(value="—")
+        self._vars["service_selected_install"] = tk.StringVar(value="—")
 
         status_frame = ttk.LabelFrame(frame, text="Status")
         status_frame.grid(row=0, column=0, padx=4, pady=(4, 2), sticky="ew")
@@ -5753,7 +5831,7 @@ class MEPGui:
         manager_entry = ttk.Entry(status_frame, textvariable=self._vars["service_manager_status"], state="readonly")
         manager_entry.grid(row=0, column=1, sticky="ew", padx=5, pady=2)
         self._bind_copy_menu(manager_entry, self._vars["service_manager_status"])
-        ttk.Label(status_frame, text="Running").grid(row=0, column=2, sticky="w", padx=5, pady=2)
+        ttk.Label(status_frame, text="Services").grid(row=0, column=2, sticky="w", padx=5, pady=2)
         summary_entry = ttk.Entry(status_frame, textvariable=self._vars["service_services_summary"], state="readonly")
         summary_entry.grid(row=0, column=3, sticky="ew", padx=5, pady=2)
         self._bind_copy_menu(summary_entry, self._vars["service_services_summary"])
@@ -5766,22 +5844,32 @@ class MEPGui:
         )
 
         services_frame = ttk.LabelFrame(frame, text="Services")
-        services_frame.grid(row=1, column=0, padx=4, pady=2, sticky="nsew")
-        services_frame.columnconfigure(0, weight=1)
-        services_frame.rowconfigure(0, weight=1)
+        services_frame.grid(row=2, column=0, padx=4, pady=2, sticky="nsew")
+        services_frame.columnconfigure(1, weight=1)
+        services_frame.columnconfigure(3, weight=1)
+        services_frame.columnconfigure(4, weight=0)
+        services_frame.rowconfigure(3, weight=1)
+        ttk.Label(services_frame, text="Service").grid(row=0, column=0, sticky="w", padx=5, pady=2)
+        selected_name = ttk.Entry(services_frame, textvariable=self._vars["service_selected_name"], state="readonly")
+        selected_name.grid(row=0, column=1, sticky="ew", padx=5, pady=2)
+        self._bind_copy_menu(selected_name, self._vars["service_selected_name"])
+        ttk.Label(services_frame, text="Install").grid(row=0, column=2, sticky="w", padx=5, pady=2)
+        ttk.Entry(services_frame, textvariable=self._vars["service_selected_install"], state="readonly", width=16).grid(row=0, column=3, sticky="ew", padx=5, pady=2)
+        ttk.Label(services_frame, text="State").grid(row=1, column=0, sticky="w", padx=5, pady=2)
+        ttk.Entry(services_frame, textvariable=self._vars["service_selected_state"], state="readonly", width=16).grid(row=1, column=1, sticky="ew", padx=5, pady=2)
+        ttk.Label(services_frame, text="Substate").grid(row=1, column=2, sticky="w", padx=5, pady=2)
+        ttk.Entry(services_frame, textvariable=self._vars["service_selected_substate"], state="readonly", width=16).grid(row=1, column=3, sticky="ew", padx=5, pady=2)
         self._service_services_tree = ttk.Treeview(
             services_frame,
-            columns=("unit", "active", "substate", "enabled", "pid", "description"),
+            columns=("unit", "state", "pid", "description"),
             show="headings",
             selectmode="extended",
             height=9,
         )
         headings = {
-            "unit": ("Unit", 220),
-            "active": ("Active", 85),
-            "substate": ("Substate", 95),
-            "enabled": ("Enabled", 95),
-            "pid": ("PID", 70),
+            "unit": ("Unit", 150),
+            "state": ("State", 70),
+            "pid": ("PID", 85),
             "description": ("Description", 320),
         }
         for column, (label, width) in headings.items():
@@ -5790,13 +5878,13 @@ class MEPGui:
         service_ysb = ttk.Scrollbar(services_frame, orient="vertical", command=self._service_services_tree.yview)
         service_xsb = ttk.Scrollbar(services_frame, orient="horizontal", command=self._service_services_tree.xview)
         self._service_services_tree.configure(yscrollcommand=service_ysb.set, xscrollcommand=service_xsb.set)
-        self._service_services_tree.grid(row=0, column=0, sticky="nsew")
-        service_ysb.grid(row=0, column=1, sticky="ns")
-        service_xsb.grid(row=1, column=0, sticky="ew")
+        self._service_services_tree.grid(row=3, column=0, columnspan=4, sticky="nsew")
+        service_ysb.grid(row=3, column=4, sticky="ns")
+        service_xsb.grid(row=4, column=0, columnspan=4, sticky="ew")
         self._service_services_tree.bind("<<TreeviewSelect>>", self._service_on_tree_select)
 
         controls_frame = ttk.Frame(services_frame)
-        controls_frame.grid(row=2, column=0, columnspan=2, sticky="ew", padx=4, pady=4)
+        controls_frame.grid(row=5, column=0, columnspan=5, sticky="ew", padx=4, pady=4)
         for column in range(6):
             controls_frame.columnconfigure(column, weight=1 if column >= 3 else 0)
         self._vars["service_action_scope"] = tk.StringVar(value="selected")
@@ -5814,9 +5902,17 @@ class MEPGui:
         stop_button.grid(row=0, column=4, sticky="ew", padx=2)
         restart_button.grid(row=0, column=5, sticky="ew", padx=2)
         self._service_action_widgets = [start_button, stop_button, restart_button]
+        self._vars["service_cmd_preview"] = tk.StringVar(value="Hover over an action to preview the systemctl command")
+        ttk.Label(controls_frame, text="Command:").grid(row=1, column=0, columnspan=2, sticky="w", padx=2, pady=(2, 2))
+        ttk.Label(controls_frame, textvariable=self._vars["service_cmd_preview"], foreground="grey", font=("TkDefaultFont", 8)).grid(
+            row=1, column=2, columnspan=4, sticky="w", padx=2, pady=(2, 2)
+        )
+        self._service_bind_command_preview(start_button, "start")
+        self._service_bind_command_preview(stop_button, "stop")
+        self._service_bind_command_preview(restart_button, "restart")
 
         log_frame = ttk.LabelFrame(frame, text="Journal")
-        log_frame.grid(row=2, column=0, padx=4, pady=(2, 2), sticky="nsew")
+        log_frame.grid(row=3, column=0, padx=4, pady=(2, 2), sticky="nsew")
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(1, weight=1)
         log_controls = ttk.Frame(log_frame)
@@ -5843,7 +5939,12 @@ class MEPGui:
         ttk.Button(log_controls, text="Clear", command=self._service_clear_buffer_and_widget).grid(row=0, column=4)
 
         self._service_log_text = scrolledtext.ScrolledText(
-            log_frame, height=10, wrap="word", font=("TkFixedFont", 9), background="#f5f5f5"
+            log_frame,
+            height=10,
+            wrap="word",
+            font=("TkFixedFont", 9),
+            background="#f5f5f5",
+            exportselection=False,
         )
         self._service_log_text.tag_configure("service_ts", foreground="#6b7280")
         self._service_log_text.tag_configure("service_msg", foreground="#111827")
@@ -5852,7 +5953,7 @@ class MEPGui:
             "<Key>",
             lambda event: None if (event.state & 0x4 and event.keysym in ("c", "C", "a", "A")) else "break",
         )
-        self._bind_copy_menu(self._service_log_text)
+        self._bind_copy_menu(self._service_log_text, allow_paste=False)
 
         self._service_apply_status({})
         self.root.after(100, self._service_refresh_status_async)
@@ -6258,14 +6359,14 @@ class MEPGui:
         st_f.columnconfigure(6, weight=0)
 
         _ro_row(st_f, 0, 0, "Docker", "docker_engine_status")
-        _ro_row(st_f, 0, 1, "Services", "docker_services_summary")
+        _ro_row(st_f, 0, 1, "Containers", "docker_services_summary")
         _ro_row(st_f, 1, 0, "Compose Dir", "docker_compose_dir")
         _ro_row(st_f, 1, 1, "Last Refresh", "docker_last_refresh")
         ttk.Button(st_f, text="Refresh", width=9, command=self._docker_refresh_status_async).grid(
             row=0, column=6, rowspan=2, padx=(8, 6), pady=2, sticky="nsew"
         )
 
-        svc_f = ttk.LabelFrame(frame, text="Services")
+        svc_f = ttk.LabelFrame(frame, text="Containers")
         svc_f.grid(row=1, column=0, padx=4, pady=(2, 2), sticky="ew")
         for c in (1, 3):
             svc_f.columnconfigure(c, weight=1)
@@ -6711,17 +6812,15 @@ class MEPGui:
             self._vars["tun_name"].set("—")
             text = "no status received"
         else:
-            tuner_data = status.get("tuner")
-            tuner_data = tuner_data if isinstance(tuner_data, dict) else {}
             self._vars["tun_state"].set(str(status.get("state", "—")))
-            name_val = tuner_data.get("name", "—")
+            name_val = status.get("name", status.get("backend", "—"))
             self._vars["tun_name"].set(str(name_val) if name_val else "—")
 
-            freq_val = self._safe_float(tuner_data.get("freq_mhz"))
+            freq_val = self._safe_float(status.get("frequency_mhz"))
             if freq_val is not None and not self._vars["tun_set_freq"].get().strip():
                 self._vars["tun_set_freq"].set(str(freq_val))
 
-            pwr_val = self._safe_float(tuner_data.get("pwr_dbm"))
+            pwr_val = self._safe_float(status.get("power_dbm"))
             if pwr_val is not None and not self._vars["tun_set_power"].get().strip():
                 self._vars["tun_set_power"].set(str(pwr_val))
 
@@ -6754,8 +6853,6 @@ class MEPGui:
                 else:
                     lines.append(f"{k}: {v}")
             info = (status or {}).get("info")
-            if info is None and isinstance((status or {}).get("tuner"), dict):
-                info = (status or {})["tuner"].get("info")
             if info:
                 lines.append("--- info ---")
                 lines.append(str(info).replace("\\r\\n", "\n").replace("\r\n", "\n"))
@@ -6779,7 +6876,7 @@ class MEPGui:
         value = data.get("value")
         if value is None:
             return
-        if task == "get_freq":
+        if task == "get_frequency":
             self._vars["tun_set_freq"].set(str(value))
             logging.info(f"TUN: freq = {value} MHz")
         elif task == "get_power":
@@ -6803,7 +6900,11 @@ class MEPGui:
 
     def _tun_init(self):
         self.mep.tuner.initialize()
-        logging.info("TUN: automatic init_tuner sent")
+        logging.info("TUN: initialize sent")
+
+    def _tun_discover(self):
+        self.mep.tuner.discover()
+        logging.info("TUN: discover sent")
 
     def _tun_set_freq(self):
         try:
@@ -6812,11 +6913,11 @@ class MEPGui:
             logging.error("TUN: invalid frequency value")
             return
         self.mep.tuner.set_frequency(freq)
-        logging.info(f"TUN: set_freq {freq:.3f} MHz sent")
+        logging.info(f"TUN: set_frequency {freq:.3f} MHz sent")
 
     def _tun_get_freq(self):
         self.mep.tuner.get_frequency()
-        logging.info("TUN: get_freq sent")
+        logging.info("TUN: get_frequency sent")
 
     def _tun_set_power(self):
         try:
@@ -6832,25 +6933,25 @@ class MEPGui:
         logging.info("TUN: get_power sent")
 
     def _tun_check_lock(self):
-        self.mep.tuner.check_lock()
+        self.mep.tuner.get_lock_status()
         logging.info("TUN: get_lock_status sent")
-
-    def _tun_restart(self):
-        self.mep.tuner.restart()
-        logging.info("TUN: restart_tuner sent")
 
     def _tun_send_status(self):
         self.mep.tuner.status()
         logging.info("TUN: status command sent")
 
     def _tun_update_capability_buttons(self):
-        name = self._vars.get("tun_name", tk.StringVar()).get().lower()
-        state = "normal" if "valon" in name else "disabled"
-        for w in getattr(self, "_valon_only_widgets", []):
-            try:
-                w.configure(state=state)
-            except Exception:
-                pass
+        capabilities = self.mep.tuner.get_status().get("capabilities", {})
+        controls = [
+            (getattr(self, "_tuner_power_widgets", []), capabilities.get("power", False)),
+            (getattr(self, "_tuner_lock_widgets", []), capabilities.get("lock_status", False)),
+        ]
+        for widgets, supported in controls:
+            for widget in widgets:
+                try:
+                    widget.configure(state="normal" if supported else "disabled")
+                except Exception:
+                    pass
 
     # ------------------------------------------------------------------ #
     #  REC helpers

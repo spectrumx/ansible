@@ -1048,7 +1048,7 @@ class Rx:
             lo_mhz = frequency_hz / 1e6 + (if_mhz if injection == "high" else -if_mhz)
 
             # Set the external tuner LO for the requested RF frequency.
-            self.mqtt.command(TUNER_COMMAND, "set_freq", {"freq_mhz": lo_mhz}, session_id)
+            self.mqtt.command(TUNER_COMMAND, "set_frequency", {"frequency_mhz": lo_mhz}, session_id)
         else:
             # Set the RFSoC NCO directly when no external tuner is selected.
             self.mqtt.command(RFSOC_COMMAND, "set", f"freq_IF {frequency_hz / 1e6}", session_id)
@@ -1142,7 +1142,7 @@ class Tx:
             lo_mhz = center + (if_mhz if injection == "high" else -if_mhz)
 
             # Set the external tuner LO for the requested TX center frequency.
-            self.mqtt.command(TUNER_COMMAND, "set_freq", {"freq_mhz": lo_mhz}, session_id)
+            self.mqtt.command(TUNER_COMMAND, "set_frequency", {"frequency_mhz": lo_mhz}, session_id)
 
         # Set the TX center frequency.
         self.mqtt.command(RFSOC_COMMAND, "set", f"tx_center_freq {center}", session_id)
@@ -1245,10 +1245,7 @@ class CaptureOrchestrator:
     def _resolved_tuner_model(status):
         if not isinstance(status, dict):
             return None
-        tuner = status.get("tuner")
-        if isinstance(tuner, dict):
-            return str(tuner.get("name") or "") or None
-        return None
+        return str(status.get("name") or status.get("backend") or "") or None
 
     @staticmethod
     def _write_json(path: Path, payload: dict):

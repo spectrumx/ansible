@@ -1,4 +1,5 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 Massachusetts Institute of Technology
+# SPDX-FileCopyrightText: Copyright (c) 2026 Massachusetts Institute of Technology
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +17,8 @@
 # rps 10/25/2024
 # alekspop 04/11/2025
 # ben welchman 06/05/2025
+# Ryan Volz <rvolz@mit.edu> 02/2026
+# John Marino <john.marino@colorado.edu> 09/2026
 #
 # originally lmx2820.py
 # code from https://forums.raspberrypi.com/viewtopic.php?t=319702
@@ -43,65 +46,21 @@ class:
 
 """
 
+import logging
 import os
-import sys
 import time
+
+from .tuner_base import Tuner
 
 SIMU = False
 
-# set environment variable to register the FT232H board
-os.environ["BLINKA_FT232H"] = "1"
-
-#
-# many dependencies to getting the device to work
-#
-#
-# exception raised if board not plugged in
-#
-try:
-    import board
-except Exception as eobj:
-    if SIMU:
-        pass
-    else:
-        print("Exception on 'import board\n", eobj)
-        print("Exiting early")
-        sys.exit()
-# end except
-
-try:
-    import busio
-except Exception as eobj:
-    if SIMU:
-        pass
-    else:
-        print("Exception on 'import busio\n", eobj)
-        print("Exiting early")
-        sys.exit()
-# end except
-
-try:
-    from digitalio import DigitalInOut
-except Exception as eobj:
-    if SIMU:
-        pass
-    else:
-        print("Exception on 'from digitalio import DigitalInOut\n", eobj)
-        print("Exiting early")
-        sys.exit()
-# end except
-
-
-# from pyftdi.spi import SpiController
+logger = logging.getLogger(__name__)
 
 #
 # ------------------------------------------------------------------------------
 #
 #  GLOBALS
 #
-
-spi = None
-CSpin = None
 
 #
 # ------------------------------------------------------------------------------
@@ -929,83 +888,60 @@ def LMX2820ChangeFreq(spi, cs, LMX, newFreq):
 
 
 #
-# Function to call LMX2820ChangeFreq based on command line input
-# Currently only operates between 1 and 22.6 GHz
-#
-def tune():
-    raw = input("Enter Frequency in GHz (1 to 22.6 GHz): ")
-    try:
-        newFreq = float(raw) * 1e9
-    except (ValueError, TypeError):
-        print(f"'{raw}' is not a valid frequency")
-        return tune()
+# The service-facing LMX2820 implementation stays in this file with the
+# register implementation above it.
+class LMX2820Tuner(Tuner):
+    name = "lmx2820"
 
-    if int(round(float(raw) * 1e9)) % 1000 != 0:
-        print("Can not tune to a precision of less than 1 kHz")
-        return tune()
+    # The udev device name identifies an attached LMX2820 interface.
+    device = "/dev/lmx2820"
 
-    if not (1e9 <= newFreq <= 22.6e9):
-        print("Frequency must be in range")
-        return tune()
+    # Configure the LMX2820 reference path installed on this device.
+    reference_frequency = 10000000.0
+    reference_doubler = 0
+    reference_multiplier = 1
+    reference_pre_divider = 1
+    reference_post_divider = 1
 
-    ghz = newFreq / 1e9
-    print(f"Tuning to {ghz} GHz")
-    LMX2820ChangeFreq(spi, CSpin, LMX, int(newFreq))
-    print(f"----------Tuned to {ghz} GHz----------\n")
+    def __init__(self):
+        self.frequency_mhz = None
+        self.tuner_impl = None
+        self.spi = None
+        self.chip_select = None
 
-    return tune()
+    def initialize(self):
+        # Load the FT232H libraries only when this backend is selected.
+        os.environ["BLINKA_FT232H"] = "1"
+        import board
+        import busio
+        import digitalio
 
+        # Build and program the physical tuner.
+        self.tuner_impl = LMX2820(self.reference_frequency, self.reference_doubler, self.reference_multiplier, self.reference_pre_divider, self.reference_post_divider)
+        self.spi = busio.SPI(board.SCK, board.MOSI, board.MISO)
+        self.chip_select = digitalio.DigitalInOut(board.D4)
+        self.chip_select.switch_to_output(value=True)
+        LMX2820StartUp(self.tuner_impl, self.spi, self.chip_select)
 
-#
-#
-# ----------------------------------
-#     main
-# ----------------------------------
-#
-if __name__ == "__main__":
-    if SIMU:
-        print("\n*** FTDI SIMULATION !!! ***\n")
+    def close(self):
+        if self.chip_select is not None:
+            self.chip_select.deinit()
+            self.chip_select = None
+        if self.spi is not None:
+            self.spi.deinit()
+            self.spi = None
 
-    # ctrl = SpiController(5)
+    def set_frequency(self, frequency_mhz):
+        frequency_hz = int(frequency_mhz * 1e6)
+        logger.info("Setting LMX2820 frequency to %s Hz", frequency_hz)
+        LMX2820ChangeFreq(self.spi, self.chip_select, self.tuner_impl, frequency_hz)
+        self.frequency_mhz = frequency_hz / 1e6
+        return self.frequency_mhz
 
-    try:
-        spi = busio.SPI(
-            board.SCK,  # clock
-            board.MOSI,  # mosi
-            board.MISO,
-        )  # miso
-    except Exception as eobj:
-        if SIMU:
-            print("busio.SPI() Exception:", eobj)
-        else:
-            raise
+    def get_frequency(self):
+        return self.frequency_mhz
 
-    try:
-        CSpin = DigitalInOut(board.D4)
-        CSpin.switch_to_output(value=True)
-    except Exception as eobj:
-        if SIMU:
-            print("busio.SPI() Exception:", eobj)
-        else:
-            raise
-
-    print("Initializing register map")
-    LMX = LMX2820(
-        10e6,  # RefFREQ                  # initiation of class __init__
-        0,  # RefDoubler 0 -> bypasses
-        1,  # RefMultipler
-        1,  # PreRDiv
-        1,
-    )  # PostRDiv
-
-    print("Writing register map to LMX2820")
-    LMX2820StartUp(LMX, spi, CSpin)
-    print("-----Tuned to 6.0 GHz-----")
-
-    tune()
-
-#
-# ----------------------------------
-#     END OF FILE
-# ----------------------------------
-#
+    def status(self):
+        status = super().status()
+        status["frequency_mhz"] = self.frequency_mhz
+        return status

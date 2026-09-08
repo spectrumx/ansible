@@ -569,7 +569,7 @@ _DESC_GPS = {
                 "duration_s": {"type": "float", "minimum": 1,
                                "maximum": _RAW_STREAM_MAX_DURATION_S,
                                "default": _RAW_STREAM_DEFAULT_DURATION_S},
-                "mode": {"type": "string", "options": ["gnss", "all"], "default": "gnss"},
+                "mode": {"type": "string", "options": ["gnss", "pmit", "all"], "default": "all"},
             },
         },
         "stop_raw_stream": {
@@ -1273,6 +1273,8 @@ def _raw_stream_active():
 
 
 def _raw_line_allowed(line, mode):
+    if mode == "pmit":
+        return line.startswith("$PMIT")
     if mode == "all":
         return True
     return line.startswith("{") or (line.startswith("$") and not line.startswith("$PMIT"))
@@ -1769,15 +1771,15 @@ async def _handle_gps_commands(client, service, task_name, args, payload):
         await _send_response(client, service, {"exception": "duration_s must be numeric"},
                              payload, subtopic)
         return
-    mode = str(args.get("mode", "gnss")).lower().strip()
+    mode = str(args.get("mode", "all")).lower().strip()
     if not 1 <= duration_s <= _RAW_STREAM_MAX_DURATION_S:
         await _send_response(client, service, {
             "exception": f"duration_s must be in range [1, {_RAW_STREAM_MAX_DURATION_S:g}]",
         }, payload, subtopic)
         return
-    if mode not in {"gnss", "all"}:
+    if mode not in {"gnss", "pmit", "all"}:
         await _send_response(client, service,
-                             {"exception": "mode must be 'gnss' or 'all'"}, payload, subtopic)
+                             {"exception": "mode must be 'gnss', 'pmit', or 'all'"}, payload, subtopic)
         return
 
     _raw_stream_deadline_monotonic = time.monotonic() + duration_s
