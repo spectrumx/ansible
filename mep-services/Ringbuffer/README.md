@@ -16,9 +16,6 @@ is one service process owning a configured collection of named ringbuffers.
 It does not own RFSoC tuning, recorder configuration, capture naming, SDS
 upload, or GUI behavior. The future SDS service is separate.
 
-This service does not own RFSoC tuning, recorder configuration, capture naming,
-SDS upload, or GUI behavior. The future SDS service is a separate service.
-
 ## Multiple ringbuffers
 
 One service process can own several named ringbuffers, for example:
@@ -93,7 +90,7 @@ Override it for testing without changing the file:
 
 ```bash
 RINGBUFFER_PATH=/data/ringbuffer-test \
-/usr/bin/python3 -u /opt/mep-services/Ringbuffer/ringbuffer.py
+/usr/bin/python3 -u /opt/ansible/mep-services/Ringbuffer/ringbuffer.py
 ```
 
 The service reads `ringbuffer.yaml` beside the Python file by default. Set
@@ -101,8 +98,8 @@ The service reads `ringbuffer.yaml` beside the Python file by default. Set
 deployment.
 
 The included systemd unit runs the project copy at
-`/opt/mep-services/Ringbuffer/ringbuffer.py`, so it loads the adjacent
-`/opt/mep-services/Ringbuffer/ringbuffer.yaml` automatically.
+`/opt/ansible/mep-services/Ringbuffer/ringbuffer.py`, so it loads the adjacent
+`/opt/ansible/mep-services/Ringbuffer/ringbuffer.yaml` automatically.
 
 ## MQTT topics
 
