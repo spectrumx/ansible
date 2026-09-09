@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import queue
 import shutil
 import threading
@@ -15,12 +14,12 @@ from pathlib import Path
 
 import inotify.adapters
 import paho.mqtt.client as mqtt
-import yaml
 
 
 SERVICE_NAME = "archivemanager"
-BASE_DIR = Path(__file__).resolve().parent
-CONFIG_PATH = Path(os.environ.get("ARCHIVE_MANAGER_CONFIG", BASE_DIR / "archive_manager.yaml"))
+DATA_ROOT = Path("/data/captures")
+RECONCILE_INTERVAL_S = 3600.0
+DEBOUNCE_INTERVAL_S = 1.0
 ANNOUNCE_TOPIC = f"{SERVICE_NAME}/announce"
 COMMAND_TOPIC = f"{SERVICE_NAME}/command"
 RESPONSE_TOPIC = f"{SERVICE_NAME}/response"
@@ -73,16 +72,10 @@ OBSERVED_EVENTS = {
 class ArchiveManagerService:
     """Maintain the local capture inventory and expose it over MQTT."""
 
-    def __init__(self, config_path: Path = CONFIG_PATH):
-        config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-        self.config_path = config_path
-        self.data_root = Path(config.get("data_root", "/data/captures")).resolve()
-        self.reconcile_interval_s = max(
-            300.0, float(config.get("reconcile_interval_s", 3600))
-        )
-        self.debounce_interval_s = max(
-            0.0, float(config.get("debounce_interval_s", 1.0))
-        )
+    def __init__(self):
+        self.data_root = DATA_ROOT.resolve()
+        self.reconcile_interval_s = RECONCILE_INTERVAL_S
+        self.debounce_interval_s = DEBOUNCE_INTERVAL_S
 
         self.started_at = time.time()
         self._stop = threading.Event()
