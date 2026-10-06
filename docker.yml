@@ -4,11 +4,10 @@
 
     - name: clone docker repository
       git:
-        repo: git@github.com:spectrumx/docker.git
+        repo: https://github.com/spectrumx/docker.git
         dest: /opt/radiohound/docker
         update: yes
         force: yes
-        key_file: /opt/radiohound/.ssh/id_rsa
         accept_hostkey: yes
       ignore_errors: true
 
@@ -24,8 +23,8 @@
       register: docker_safe_directory_check
       ignore_errors: true
 
-    - name: Add ssh key to docker repo
-      shell: GIT_DIR=/opt/radiohound/docker/.git GIT_WORK_TREE=/opt/radiohound/docker git config core.sshCommand "ssh -i /opt/radiohound/.ssh/id_rsa"
+    - name: Move docker git repo to https
+      shell: GIT_DIR=/opt/radiohound/docker/.git GIT_WORK_TREE=/opt/radiohound/docker git remote set-url origin https://github.com/spectrumx/docker.git
       when: docker_safe_directory_check.rc != 0
 
     - name: Add git safe.directory to docker repo
