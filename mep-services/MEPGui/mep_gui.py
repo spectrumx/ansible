@@ -1704,7 +1704,7 @@ class MEPGui:
         ttk.Label(metadata, text="Modified").grid(row=0, column=4, sticky="w", padx=(18, 4))
         ttk.Label(metadata, textvariable=self._cap_modified_var).grid(row=0, column=5, sticky="w")
 
-        upload_frame = ttk.LabelFrame(frame)
+        upload_frame = ttk.LabelFrame(frame, text="SDS Upload")
         upload_frame.grid(row=2, column=0, sticky="ew", padx=4, pady=(0, 4))
         upload_frame.columnconfigure(1, weight=1)
         self._cap_upload_state_var = tk.StringVar(value="-")
@@ -1715,7 +1715,6 @@ class MEPGui:
         upload_heading = ttk.Frame(upload_frame)
         upload_heading.grid(row=0, column=0, columnspan=2, sticky="ew", padx=6, pady=(5, 2))
         upload_heading.columnconfigure(0, weight=1)
-        ttk.Label(upload_heading, text="SDS Upload").grid(row=0, column=0, sticky="w")
         ttk.Label(upload_heading, textvariable=self._cap_upload_state_var).grid(row=0, column=1, sticky="e")
         verification_row = ttk.Frame(upload_frame)
         verification_row.grid(row=1, column=0, columnspan=2, sticky="ew", padx=6, pady=(0, 5))
