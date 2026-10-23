@@ -7,10 +7,6 @@
     register: safe_directory_check
     ignore_errors: true
 
-  - name: Add key to ansible repo
-    shell: GIT_DIR=/opt/ansible/.git GIT_WORK_TREE=/opt/ansible git config core.sshCommand "ssh -i /opt/radiohound/.ssh/id_rsa"
-    when: safe_directory_check.rc != 0
-
   - name: Add git safe.directory to ansible repo
     shell: GIT_DIR=/opt/ansible/.git GIT_WORK_TREE=/opt/ansible git config --add safe.directory /opt/ansible
     when: safe_directory_check.rc != 0
