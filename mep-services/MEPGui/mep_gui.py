@@ -1708,32 +1708,34 @@ class MEPGui:
         upload_frame = ttk.LabelFrame(frame, text="SDS Upload")
         upload_frame.grid(row=2, column=0, sticky="ew", padx=4, pady=(0, 4))
         upload_frame.columnconfigure(1, weight=1)
-        upload_frame.columnconfigure(3, weight=1)
+        upload_frame.columnconfigure(2, weight=1)
         self._cap_upload_state_var = tk.StringVar(value="-")
         self._cap_remote_var = tk.StringVar(value="-")
-        self._cap_sds_captures_var = tk.StringVar(value="-")
         self._cap_verified_bytes_var = tk.StringVar(value="-")
         self._cap_verified_files_var = tk.StringVar(value="-")
 
-        ttk.Label(upload_frame, text="Remote").grid(row=0, column=0, sticky="w", padx=(6, 2), pady=(5, 2))
+        ttk.Label(upload_frame, text="State").grid(row=0, column=0, sticky="w", padx=(6, 8), pady=(5, 2))
+        ttk.Label(upload_frame, textvariable=self._cap_upload_state_var).grid(row=0, column=1, columnspan=2, sticky="w", pady=(5, 2))
+        ttk.Label(upload_frame, text="Verified").grid(row=1, column=0, sticky="w", padx=(6, 8), pady=2)
+        ttk.Label(upload_frame, textvariable=self._cap_verified_bytes_var).grid(row=1, column=1, sticky="w", padx=(0, 8), pady=2)
+        ttk.Label(upload_frame, textvariable=self._cap_verified_files_var).grid(row=1, column=2, sticky="w", padx=(0, 6), pady=2)
+        ttk.Separator(upload_frame, orient="horizontal").grid(row=2, column=0, columnspan=3, sticky="ew", padx=6, pady=5)
+
+        directory_label = ttk.Label(upload_frame, text="SDS directory")
+        directory_label.grid(row=3, column=0, sticky="w", padx=(6, 8), pady=2)
+        self._add_tooltip(directory_label, "Directory relative to your SDS account root; this is not a local filesystem path.")
         remote_entry = ttk.Entry(upload_frame, textvariable=self._cap_remote_var, state="readonly")
-        remote_entry.grid(row=0, column=1, sticky="ew", padx=2, pady=(5, 2))
+        remote_entry.grid(row=3, column=1, columnspan=2, sticky="ew", padx=(0, 6), pady=2)
         self._bind_copy_menu(remote_entry, strvar=self._cap_remote_var, allow_paste=False)
-        ttk.Label(upload_frame, text="Bytes verified").grid(row=0, column=2, sticky="w", padx=(12, 2), pady=(5, 2))
-        ttk.Label(upload_frame, textvariable=self._cap_verified_bytes_var).grid(row=0, column=3, sticky="w", padx=(2, 6), pady=(5, 2))
-
-        ttk.Label(upload_frame, text="State").grid(row=1, column=0, sticky="w", padx=(6, 2), pady=2)
-        ttk.Label(upload_frame, textvariable=self._cap_upload_state_var).grid(row=1, column=1, sticky="w", padx=2, pady=2)
-        ttk.Label(upload_frame, text="Files verified").grid(row=1, column=2, sticky="w", padx=(12, 2), pady=2)
-        ttk.Label(upload_frame, textvariable=self._cap_verified_files_var).grid(row=1, column=3, sticky="w", padx=(2, 6), pady=2)
-
-        ttk.Label(upload_frame, text="SDS captures").grid(row=2, column=0, sticky="w", padx=(6, 2), pady=2)
-        captures_entry = ttk.Entry(upload_frame, textvariable=self._cap_sds_captures_var, state="readonly")
-        captures_entry.grid(row=2, column=1, columnspan=3, sticky="ew", padx=(2, 6), pady=2)
-        self._bind_copy_menu(captures_entry, strvar=self._cap_sds_captures_var, allow_paste=False)
+        self._cap_sds_captures_frame = ttk.Frame(upload_frame)
+        self._cap_sds_captures_frame.grid(row=4, column=0, columnspan=3, sticky="ew", padx=6, pady=(3, 2))
+        self._cap_sds_captures_frame.columnconfigure(0, minsize=directory_label.winfo_reqwidth() + 8)
+        self._cap_sds_captures_frame.columnconfigure(1, weight=1)
+        self._cap_sds_capture_rows = None
+        self._cap_render_sds_captures({})
 
         actions = ttk.Frame(upload_frame)
-        actions.grid(row=3, column=0, columnspan=4, sticky="ew", padx=6, pady=(3, 6))
+        actions.grid(row=5, column=0, columnspan=3, sticky="ew", padx=6, pady=(3, 6))
         actions.columnconfigure(1, weight=1)
         self._cap_token_var = tk.StringVar()
         self._cap_dry_run_var = tk.BooleanVar(value=False)
@@ -1974,11 +1976,7 @@ class MEPGui:
             else "Checking..." if verification.get("state") == "checking" else "-"
         )
         self._cap_remote_var.set(str(upload.get("remote_path") or "-") if upload else "-")
-        sds_captures = upload.get("sds_captures") if upload else None
-        self._cap_sds_captures_var.set(
-            "; ".join(f"{channel}: {capture_uuid}" for channel, capture_uuid in sorted(sds_captures.items()))
-            if isinstance(sds_captures, dict) and sds_captures else "-"
-        )
+        self._cap_render_sds_captures(upload.get("sds_captures") if upload else None)
 
         data_ready = self.archive_manager.is_available()
         upload_ready = self.upload_manager.is_available()
@@ -2021,6 +2019,29 @@ class MEPGui:
         else:
             reason = ""
         self._cap_action_reason_var.set(reason)
+
+    def _cap_render_sds_captures(self, captures):
+        rows = tuple(sorted((str(channel), str(capture_uuid)) for channel, capture_uuid in captures.items())) if isinstance(captures, dict) else ()
+        if rows == self._cap_sds_capture_rows:
+            return
+        self._cap_sds_capture_rows = rows
+        frame = self._cap_sds_captures_frame
+        for widget in frame.winfo_children():
+            widget.destroy()
+        ttk.Label(frame, text="Channel").grid(row=0, column=0, sticky="w", pady=(0, 2))
+        capture_label = ttk.Label(frame, text="Capture ID")
+        capture_label.grid(row=0, column=1, sticky="w", pady=(0, 2))
+        self._add_tooltip(capture_label, "The SDS capture UUID for each DigitalRF channel in this directory.")
+        if not rows:
+            ttk.Label(frame, text="-").grid(row=1, column=0, sticky="w")
+            ttk.Label(frame, text="No capture IDs confirmed").grid(row=1, column=1, sticky="w")
+        for row, (channel, capture_uuid) in enumerate(rows, start=1):
+            ttk.Label(frame, text=channel).grid(row=row, column=0, sticky="w", pady=1)
+            entry = ttk.Entry(frame, width=1)
+            entry.insert(0, capture_uuid)
+            entry.configure(state="readonly")
+            self._bind_copy_menu(entry, allow_paste=False)
+            entry.grid(row=row, column=1, sticky="ew", pady=1)
 
     @staticmethod
     def _cap_format_sds_state(upload):
