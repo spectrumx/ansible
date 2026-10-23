@@ -1749,7 +1749,11 @@ class MEPGui:
         self._cap_verify_btn = ttk.Button(actions, text="Verify files", command=self._cap_verify_upload)
         self._cap_verify_btn.grid(row=1, column=4, padx=2, pady=(4, 0))
         self._cap_action_reason_var = tk.StringVar(value="Select a capture to manage or upload")
-        ttk.Label(actions, textvariable=self._cap_action_reason_var, foreground="grey").grid(row=2, column=0, columnspan=5, sticky="w", pady=(5, 0))
+        reason_label = ttk.Label(actions, textvariable=self._cap_action_reason_var, foreground="grey")
+        reason_label.grid(row=2, column=0, columnspan=5, sticky="w", pady=(5, 0))
+        self._cap_action_reason_var.trace_add(
+            "write", lambda *_: reason_label.grid() if self._cap_action_reason_var.get() else reason_label.grid_remove()
+        )
 
         activity_frame = ttk.LabelFrame(frame, text="Details")
         activity_frame.grid(row=3, column=0, sticky="nsew", padx=4, pady=(0, 6))
@@ -2015,7 +2019,7 @@ class MEPGui:
         elif not upload_ready:
             reason = "UploadManager is unavailable"
         else:
-            reason = "Ready"
+            reason = ""
         self._cap_action_reason_var.set(reason)
 
     @staticmethod
