@@ -37,6 +37,7 @@ ACTIVE_STATES = {
     "authenticating",
     "uploading",
     "verifying",
+    "registering",
     "stopping",
 }
 ALL_STATES = ACTIVE_STATES | {
@@ -255,7 +256,7 @@ class UploadManager:
         state["state"] = state_name
         state["error"] = error
         now = time.time()
-        if state_name in {"scanning", "authenticating", "uploading", "verifying"}:
+        if state_name in {"scanning", "authenticating", "uploading", "verifying", "registering"}:
             state["started_at"] = state.get("started_at") or now
         if state_name in {"complete", "stopped", "failed", "waiting_for_credentials"}:
             state["finished_at"] = now
@@ -399,6 +400,7 @@ class UploadManager:
         )
         if self._finish_requested(capture_name):
             return
+        self._transition(capture_name, "registering")
         try:
             with contextlib.redirect_stdout(sdk_output), contextlib.redirect_stderr(sdk_output):
                 if not self._ensure_sds_captures(client, capture_name, data_path):

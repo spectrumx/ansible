@@ -1711,6 +1711,7 @@ class MEPGui:
         upload_frame.columnconfigure(3, weight=1)
         self._cap_upload_state_var = tk.StringVar(value="-")
         self._cap_remote_var = tk.StringVar(value="-")
+        self._cap_sds_captures_var = tk.StringVar(value="-")
         self._cap_verified_bytes_var = tk.StringVar(value="-")
         self._cap_verified_files_var = tk.StringVar(value="-")
 
@@ -1718,16 +1719,21 @@ class MEPGui:
         remote_entry = ttk.Entry(upload_frame, textvariable=self._cap_remote_var, state="readonly")
         remote_entry.grid(row=0, column=1, sticky="ew", padx=2, pady=(5, 2))
         self._bind_copy_menu(remote_entry, strvar=self._cap_remote_var, allow_paste=False)
-        ttk.Label(upload_frame, text="Verified").grid(row=0, column=2, sticky="w", padx=(12, 2), pady=(5, 2))
+        ttk.Label(upload_frame, text="Bytes verified").grid(row=0, column=2, sticky="w", padx=(12, 2), pady=(5, 2))
         ttk.Label(upload_frame, textvariable=self._cap_verified_bytes_var).grid(row=0, column=3, sticky="w", padx=(2, 6), pady=(5, 2))
 
         ttk.Label(upload_frame, text="State").grid(row=1, column=0, sticky="w", padx=(6, 2), pady=2)
         ttk.Label(upload_frame, textvariable=self._cap_upload_state_var).grid(row=1, column=1, sticky="w", padx=2, pady=2)
-        ttk.Label(upload_frame, text="Files").grid(row=1, column=2, sticky="w", padx=(12, 2), pady=2)
+        ttk.Label(upload_frame, text="Files verified").grid(row=1, column=2, sticky="w", padx=(12, 2), pady=2)
         ttk.Label(upload_frame, textvariable=self._cap_verified_files_var).grid(row=1, column=3, sticky="w", padx=(2, 6), pady=2)
 
+        ttk.Label(upload_frame, text="SDS captures").grid(row=2, column=0, sticky="w", padx=(6, 2), pady=2)
+        captures_entry = ttk.Entry(upload_frame, textvariable=self._cap_sds_captures_var, state="readonly")
+        captures_entry.grid(row=2, column=1, columnspan=3, sticky="ew", padx=(2, 6), pady=2)
+        self._bind_copy_menu(captures_entry, strvar=self._cap_sds_captures_var, allow_paste=False)
+
         actions = ttk.Frame(upload_frame)
-        actions.grid(row=2, column=0, columnspan=4, sticky="ew", padx=6, pady=(3, 6))
+        actions.grid(row=3, column=0, columnspan=4, sticky="ew", padx=6, pady=(3, 6))
         actions.columnconfigure(1, weight=1)
         self._cap_token_var = tk.StringVar()
         self._cap_dry_run_var = tk.BooleanVar(value=False)
@@ -1740,7 +1746,7 @@ class MEPGui:
         self._cap_upload_btn.grid(row=1, column=2, padx=2, pady=(4, 0))
         self._cap_stop_btn = ttk.Button(actions, text="Stop", command=self._cap_stop_upload)
         self._cap_stop_btn.grid(row=1, column=3, padx=2, pady=(4, 0))
-        self._cap_verify_btn = ttk.Button(actions, text="Verify", command=self._cap_verify_upload)
+        self._cap_verify_btn = ttk.Button(actions, text="Verify files", command=self._cap_verify_upload)
         self._cap_verify_btn.grid(row=1, column=4, padx=2, pady=(4, 0))
         self._cap_action_reason_var = tk.StringVar(value="Select a capture to manage or upload")
         ttk.Label(actions, textvariable=self._cap_action_reason_var, foreground="grey").grid(row=2, column=0, columnspan=5, sticky="w", pady=(5, 0))
@@ -1952,7 +1958,7 @@ class MEPGui:
         expected_bytes = verification.get("expected_bytes")
         verified_files = verification.get("verified_files")
         expected_files = verification.get("expected_files")
-        self._cap_upload_state_var.set(str(upload.get("state") or "-").replace("_", " ").title() if upload else "-")
+        self._cap_upload_state_var.set(self._cap_format_sds_state(upload))
         self._cap_verified_bytes_var.set(
             f"{self._cap_format_bytes(verified_bytes)} / {self._cap_format_bytes(expected_bytes)}"
             if verified_bytes is not None and expected_bytes is not None
@@ -1964,6 +1970,11 @@ class MEPGui:
             else "Checking..." if verification.get("state") == "checking" else "-"
         )
         self._cap_remote_var.set(str(upload.get("remote_path") or "-") if upload else "-")
+        sds_captures = upload.get("sds_captures") if upload else None
+        self._cap_sds_captures_var.set(
+            "; ".join(f"{channel}: {capture_uuid}" for channel, capture_uuid in sorted(sds_captures.items()))
+            if isinstance(sds_captures, dict) and sds_captures else "-"
+        )
 
         data_ready = self.archive_manager.is_available()
         upload_ready = self.upload_manager.is_available()
@@ -1973,6 +1984,7 @@ class MEPGui:
             "authenticating",
             "uploading",
             "verifying",
+            "registering",
             "stopping",
         }
         upload_state = upload.get("state") if upload else None
@@ -1998,6 +2010,8 @@ class MEPGui:
             reason = str(upload.get("error") or "Upload failed; click Upload to continue")
         elif upload_state == "stopping":
             reason = "Stop requested; waiting for the current SDK operation to return"
+        elif upload_state == "registering":
+            reason = "Registering captures on SDS"
         elif not upload_ready:
             reason = "UploadManager is unavailable"
         else:
@@ -2009,15 +2023,21 @@ class MEPGui:
         if not isinstance(upload, dict):
             return "-"
         state = str(upload.get("state") or "")
-        if state in {"queued", "scanning", "authenticating", "uploading", "verifying", "stopping"}:
+        if state == "registering":
+            return "Registering Captures"
+        if state in {"queued", "scanning", "authenticating", "uploading", "verifying", "stopping", "failed", "stopped", "waiting_for_credentials"}:
             return state.replace("_", " ").title()
+        if state == "error":
+            return "Cannot read status"
+        if state == "complete" and upload.get("dry_run"):
+            return "Dry Run Complete"
         verification = upload.get("verification")
         if isinstance(verification, dict):
             verification_state = str(verification.get("state") or "")
-            if verification_state in {"checking", "verified", "incomplete", "unavailable"}:
+            if verification_state == "verified":
+                return "Complete" if state == "complete" and upload.get("sds_captures") else "Files Verified"
+            if verification_state in {"checking", "incomplete", "unavailable"}:
                 return verification_state.replace("_", " ").title()
-        if state == "error":
-            return "Cannot read status"
         return state.replace("_", " ").title() or "-"
 
     def _cap_rename(self):
