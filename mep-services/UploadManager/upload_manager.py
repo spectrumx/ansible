@@ -13,7 +13,7 @@ import threading
 import time
 import uuid
 from collections import deque
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import paho.mqtt.client as mqtt
 
@@ -233,6 +233,7 @@ class UploadManager:
             "uploaded_files": 0,
             "uploaded_bytes": 0,
             "verification": {},
+            "sds_captures": dict(existing.get("sds_captures", {}) if existing else {}),
             "error": None,
             "credentials": credentials or (existing.get("credentials", {}) if existing else {}),
             "dry_run": dry_run,
@@ -388,19 +389,78 @@ class UploadManager:
                 f"SDS verification mismatch: {verification['missing_files']} missing and "
                 f"{verification['wrong_size_files']} wrong-size files"
             )
-        self._transition(
-            capture_name,
-            "complete",
-            uploaded_files=len(expected),
-            uploaded_bytes=total_bytes,
-            verification=verification,
-        )
+        state = self._read_state(capture_name)
+        state["verification"] = verification
+        self._write_state(capture_name, state)
         self._activity(
             capture_name,
             "verification_completed",
             f"Verified {verification['verified_files']}/{verification['expected_files']} files",
         )
+        if self._finish_requested(capture_name):
+            return
+        try:
+            with contextlib.redirect_stdout(sdk_output), contextlib.redirect_stderr(sdk_output):
+                if not self._ensure_sds_captures(client, capture_name, data_path):
+                    return
+        finally:
+            sdk_output.flush()
+        if self._finish_requested(capture_name):
+            return
+        self._transition(capture_name, "complete")
         self.publish_event("upload_completed", self.get_upload(capture_name))
+
+    def _ensure_sds_captures(self, client, capture_name, data_path):
+        """Register each DigitalRF channel after its files have been verified."""
+        from spectrumx.errors import CaptureError
+        from spectrumx.models.captures import CaptureType
+
+        channels = sorted(path.parent.name for path in data_path.glob("*/drf_properties.h5") if path.is_file())
+        if not channels:
+            raise RuntimeError("Cannot create SDS capture: no DigitalRF channels with drf_properties.h5 found")
+        state = self._read_state(capture_name)
+        remote_path = PurePosixPath(state["remote_path"].strip("/"))
+        self._activity(capture_name, "capture_registration_started", "Checking SDS DigitalRF captures")
+        existing = client.captures.listing(capture_type=CaptureType.DigitalRF)
+        for channel in channels:
+            if self._finish_requested(capture_name):
+                return False
+
+            def matches(capture):
+                return (
+                    capture.capture_type == CaptureType.DigitalRF
+                    and PurePosixPath(str(capture.top_level_dir).strip("/")) == remote_path
+                    and capture.channel == channel
+                )
+
+            capture = next((value for value in existing if matches(value)), None)
+            event = "capture_reused"
+            if capture is None:
+                self._activity(capture_name, "capture_creation_started", f"Creating SDS capture for {channel}")
+                try:
+                    capture = client.captures.create(
+                        top_level_dir=remote_path,
+                        capture_type=CaptureType.DigitalRF,
+                        channel=channel,
+                        name=f"{capture_name}_{channel}",
+                    )
+                    event = "capture_created"
+                except CaptureError as exc:
+                    # A concurrent registration (or an older SDK's partial listing)
+                    # can find the capture already present. Reuse only a verified match.
+                    existing_uuid = exc.extract_existing_capture_uuid()
+                    if not existing_uuid:
+                        raise
+                    capture = client.captures.read(capture_uuid=uuid.UUID(existing_uuid))
+                    if not matches(capture):
+                        raise RuntimeError("Existing SDS capture does not match the upload path and channel") from exc
+            if capture.uuid is None:
+                raise RuntimeError(f"SDS returned no capture UUID for {channel}")
+            state = self._read_state(capture_name)
+            state.setdefault("sds_captures", {})[channel] = str(capture.uuid)
+            self._write_state(capture_name, state)
+            self._activity(capture_name, event, f"SDS capture for {channel}: {capture.uuid}")
+        return True
 
     def _finish_requested(self, capture_name):
         with self._lock:
