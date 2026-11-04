@@ -1,0 +1,7 @@
+---
+- hosts: localhost
+  tasks:
+
+  - name: Start non-Docker MEP services
+    shell: /opt/radiohound/python313/bin/python mep-services/start_services.py 
+    ignore_errors: true

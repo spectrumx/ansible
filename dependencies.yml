@@ -107,7 +107,7 @@
         - psutil>=6.0.0
         - gps>=3.19
         - digital_rf
-        - spectrumx
+        - spectrumx>=0.2.4
         - docker
         - exceptiongroup
         - aiomqtt
