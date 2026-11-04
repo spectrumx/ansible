@@ -30,8 +30,9 @@ from tkinter import ttk, scrolledtext, messagebox
 import datetime
 import numpy as np
 from PIL import Image as _PILImage, ImageTk as _PILImageTk
+from pathlib import Path
 
-MEP_SERVICES_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+MEP_SERVICES_ROOT = str(Path(__file__).resolve().parent.parent)
 sys.path.insert(0, MEP_SERVICES_ROOT)
 from mep_client import MEPClient
 
