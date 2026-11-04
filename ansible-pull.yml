@@ -24,7 +24,7 @@
     logfile: /var/log/ansible-pull.log
     workdir: /opt/ansible
     repo_url: git@github.com:spectrumx/ansible.git
-    options: --accept-host-key --private-key=/opt/radiohound/.ssh/id_rsa /opt/ansible/master_playbook.yml -e actual_hostname=$(/bin/hostname) -i inventory/inventory.ini
+    options: --accept-host-key /opt/ansible/master_playbook.yml -e actual_hostname=$(/bin/hostname) -i inventory/inventory.ini
     playbook: /opt/ansible/master_playbook.yml
 
   tasks:

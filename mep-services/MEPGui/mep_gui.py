@@ -1682,68 +1682,85 @@ class MEPGui:
         detail = ttk.LabelFrame(frame, text="Selected Capture")
         detail.grid(row=1, column=0, sticky="ew", padx=4, pady=(0, 4))
         detail.columnconfigure(1, weight=1)
-        detail.columnconfigure(3, weight=1)
         self._cap_rename_var = tk.StringVar()
         self._cap_size_var = tk.StringVar(value="-")
         self._cap_files_var = tk.StringVar(value="-")
         self._cap_modified_var = tk.StringVar(value="-")
-        self._cap_recording_var = tk.StringVar(value="No")
         ttk.Label(detail, text="Name").grid(row=0, column=0, sticky="w", padx=(6, 2), pady=(6, 3))
-        ttk.Entry(detail, textvariable=self._cap_rename_var).grid(row=0, column=1, columnspan=3, sticky="ew", padx=(2, 6), pady=(6, 3))
-        ttk.Label(detail, text="Size").grid(row=1, column=0, sticky="w", padx=(6, 2), pady=2)
-        ttk.Label(detail, textvariable=self._cap_size_var).grid(row=1, column=1, sticky="w", padx=2, pady=2)
-        ttk.Label(detail, text="Files").grid(row=1, column=2, sticky="w", padx=(12, 2), pady=2)
-        ttk.Label(detail, textvariable=self._cap_files_var).grid(row=1, column=3, sticky="w", padx=2, pady=2)
-        ttk.Label(detail, text="Modified").grid(row=2, column=0, sticky="w", padx=(6, 2), pady=2)
-        ttk.Label(detail, textvariable=self._cap_modified_var).grid(row=2, column=1, sticky="w", padx=2, pady=2)
-        ttk.Label(detail, text="Recording").grid(row=2, column=2, sticky="w", padx=(12, 2), pady=2)
-        ttk.Label(detail, textvariable=self._cap_recording_var).grid(row=2, column=3, sticky="w", padx=2, pady=2)
+        ttk.Entry(detail, textvariable=self._cap_rename_var).grid(row=0, column=1, sticky="ew", padx=(2, 4), pady=(6, 3))
         capture_actions = ttk.Frame(detail)
-        capture_actions.grid(row=3, column=0, columnspan=4, sticky="w", padx=4, pady=(3, 6))
+        capture_actions.grid(row=0, column=2, sticky="e", padx=(0, 4), pady=(6, 3))
         self._cap_rename_btn = ttk.Button(capture_actions, text="Rename", command=self._cap_rename)
         self._cap_rename_btn.grid(row=0, column=0, padx=2)
         self._cap_delete_btn = ttk.Button(capture_actions, text="Delete", command=self._cap_delete)
         self._cap_delete_btn.grid(row=0, column=1, padx=2)
 
+        metadata = ttk.Frame(detail)
+        metadata.grid(row=1, column=0, columnspan=3, sticky="ew", padx=6, pady=(2, 6))
+        ttk.Label(metadata, text="Size").grid(row=0, column=0, sticky="w", padx=(0, 4))
+        ttk.Label(metadata, textvariable=self._cap_size_var).grid(row=0, column=1, sticky="w")
+        ttk.Label(metadata, text="Files").grid(row=0, column=2, sticky="w", padx=(18, 4))
+        ttk.Label(metadata, textvariable=self._cap_files_var).grid(row=0, column=3, sticky="w")
+        ttk.Label(metadata, text="Modified").grid(row=0, column=4, sticky="w", padx=(18, 4))
+        ttk.Label(metadata, textvariable=self._cap_modified_var).grid(row=0, column=5, sticky="w")
+
         upload_frame = ttk.LabelFrame(frame, text="SDS Upload")
         upload_frame.grid(row=2, column=0, sticky="ew", padx=4, pady=(0, 4))
         upload_frame.columnconfigure(1, weight=1)
-        upload_frame.columnconfigure(3, weight=1)
         self._cap_upload_state_var = tk.StringVar(value="-")
         self._cap_remote_var = tk.StringVar(value="-")
         self._cap_verified_bytes_var = tk.StringVar(value="-")
         self._cap_verified_files_var = tk.StringVar(value="-")
 
-        ttk.Label(upload_frame, text="Remote").grid(row=0, column=0, sticky="w", padx=(6, 2), pady=(5, 2))
-        remote_entry = ttk.Entry(upload_frame, textvariable=self._cap_remote_var, state="readonly")
-        remote_entry.grid(row=0, column=1, sticky="ew", padx=2, pady=(5, 2))
-        self._bind_copy_menu(remote_entry, strvar=self._cap_remote_var, allow_paste=False)
-        ttk.Label(upload_frame, text="Verified").grid(row=0, column=2, sticky="w", padx=(12, 2), pady=(5, 2))
-        ttk.Label(upload_frame, textvariable=self._cap_verified_bytes_var).grid(row=0, column=3, sticky="w", padx=(2, 6), pady=(5, 2))
+        upload_heading = ttk.Frame(upload_frame)
+        upload_heading.grid(row=0, column=0, columnspan=2, sticky="ew", padx=6, pady=(5, 2))
+        upload_heading.columnconfigure(0, weight=1)
+        ttk.Label(upload_heading, textvariable=self._cap_upload_state_var).grid(row=0, column=1, sticky="e")
+        verification_row = ttk.Frame(upload_frame)
+        verification_row.grid(row=1, column=0, columnspan=2, sticky="ew", padx=6, pady=(0, 5))
+        verification_row.columnconfigure(0, weight=1)
+        ttk.Label(verification_row, textvariable=self._cap_verified_bytes_var).grid(row=0, column=0, sticky="w", padx=(0, 8))
+        ttk.Label(verification_row, textvariable=self._cap_verified_files_var).grid(row=0, column=1, sticky="e")
 
-        ttk.Label(upload_frame, text="State").grid(row=1, column=0, sticky="w", padx=(6, 2), pady=2)
-        ttk.Label(upload_frame, textvariable=self._cap_upload_state_var).grid(row=1, column=1, sticky="w", padx=2, pady=2)
-        ttk.Label(upload_frame, text="Files").grid(row=1, column=2, sticky="w", padx=(12, 2), pady=2)
-        ttk.Label(upload_frame, textvariable=self._cap_verified_files_var).grid(row=1, column=3, sticky="w", padx=(2, 6), pady=2)
+        directory_label = ttk.Label(upload_frame, text="Directory")
+        directory_label.grid(row=2, column=0, sticky="w", padx=(6, 8), pady=2)
+        self._add_tooltip(directory_label, "Directory relative to your SDS account root; this is not a local filesystem path.")
+        remote_entry = ttk.Entry(upload_frame, textvariable=self._cap_remote_var, state="readonly")
+        remote_entry.grid(row=2, column=1, sticky="ew", padx=(0, 6), pady=2)
+        self._bind_copy_menu(remote_entry, strvar=self._cap_remote_var, allow_paste=False)
+        self._cap_sds_captures_frame = ttk.Frame(upload_frame)
+        self._cap_sds_captures_frame.grid(row=3, column=0, columnspan=2, sticky="ew", padx=6, pady=1)
+        self._cap_sds_captures_frame.columnconfigure(0, minsize=directory_label.winfo_reqwidth() + 8)
+        self._cap_sds_captures_frame.columnconfigure(1, weight=1)
+        self._cap_sds_capture_rows = None
+        self._cap_render_sds_captures({})
 
         actions = ttk.Frame(upload_frame)
-        actions.grid(row=2, column=0, columnspan=4, sticky="ew", padx=6, pady=(3, 6))
+        actions.grid(row=4, column=0, columnspan=2, sticky="ew", padx=6, pady=(3, 6))
+        actions.columnconfigure(0, minsize=directory_label.winfo_reqwidth())
         actions.columnconfigure(1, weight=1)
         self._cap_token_var = tk.StringVar()
         self._cap_dry_run_var = tk.BooleanVar(value=False)
         self._cap_verbose_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(actions, text="Dry run", variable=self._cap_dry_run_var).grid(row=0, column=2, sticky="w", padx=4)
-        ttk.Checkbutton(actions, text="Verbose", variable=self._cap_verbose_var).grid(row=0, column=3, sticky="w", padx=4)
         ttk.Label(actions, text="Token").grid(row=0, column=0, sticky="w")
-        ttk.Entry(actions, textvariable=self._cap_token_var, show="*").grid(row=0, column=1, sticky="ew", padx=4)
-        self._cap_upload_btn = ttk.Button(actions, text="Upload", command=self._cap_start_upload)
-        self._cap_upload_btn.grid(row=1, column=2, padx=2, pady=(4, 0))
-        self._cap_stop_btn = ttk.Button(actions, text="Stop", command=self._cap_stop_upload)
-        self._cap_stop_btn.grid(row=1, column=3, padx=2, pady=(4, 0))
-        self._cap_verify_btn = ttk.Button(actions, text="Verify", command=self._cap_verify_upload)
-        self._cap_verify_btn.grid(row=1, column=4, padx=2, pady=(4, 0))
+        ttk.Entry(actions, textvariable=self._cap_token_var, show="*").grid(row=0, column=1, sticky="ew", padx=(8, 0))
+        controls = ttk.Frame(actions)
+        controls.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+        controls.columnconfigure(2, weight=1)
+        ttk.Checkbutton(controls, text="Dry run", variable=self._cap_dry_run_var).grid(row=0, column=0, sticky="w", padx=(0, 4))
+        ttk.Checkbutton(controls, text="Verbose", variable=self._cap_verbose_var).grid(row=0, column=1, sticky="w", padx=4)
+        self._cap_upload_btn = ttk.Button(controls, text="Upload", command=self._cap_start_upload)
+        self._cap_upload_btn.grid(row=0, column=3, padx=2)
+        self._cap_stop_btn = ttk.Button(controls, text="Stop", command=self._cap_stop_upload)
+        self._cap_stop_btn.grid(row=0, column=4, padx=2)
+        self._cap_verify_btn = ttk.Button(controls, text="Verify files", command=self._cap_verify_upload)
+        self._cap_verify_btn.grid(row=0, column=5, padx=(2, 0))
         self._cap_action_reason_var = tk.StringVar(value="Select a capture to manage or upload")
-        ttk.Label(actions, textvariable=self._cap_action_reason_var, foreground="grey").grid(row=2, column=0, columnspan=5, sticky="w", pady=(5, 0))
+        reason_label = ttk.Label(actions, textvariable=self._cap_action_reason_var, foreground="grey")
+        reason_label.grid(row=2, column=0, columnspan=2, sticky="w", pady=(5, 0))
+        self._cap_action_reason_var.trace_add(
+            "write", lambda *_: reason_label.grid() if self._cap_action_reason_var.get() else reason_label.grid_remove()
+        )
 
         activity_frame = ttk.LabelFrame(frame, text="Details")
         activity_frame.grid(row=3, column=0, sticky="nsew", padx=4, pady=(0, 6))
@@ -1935,26 +1952,18 @@ class MEPGui:
     def _cap_update_selected_capture(self):
         capture, upload = self._cap_selection()
         sds_check = self.upload_manager.get_sds_check(capture.get("name")) if capture else {}
-        orchestrator = self.capture_orchestrator.get_status()
-        rx = orchestrator.get("rx") if isinstance(orchestrator.get("rx"), dict) else {}
-        recording = bool(
-            capture
-            and rx.get("state") in {"starting", "running"}
-            and str(capture.get("name") or "") == str(rx.get("capture_name") or "preview")
-        )
         self._cap_size_var.set(self._cap_format_bytes(capture.get("size_bytes"), decimals=0) if capture else "-")
         self._cap_files_var.set(str(capture.get("file_count") or 0) if capture else "-")
         self._cap_modified_var.set(self._cap_format_time(capture.get("last_modified")) if capture else "-")
-        self._cap_recording_var.set("Active" if recording else "Done")
 
         verification = upload.get("verification") if upload and isinstance(upload.get("verification"), dict) else {}
         verified_bytes = verification.get("verified_bytes")
         expected_bytes = verification.get("expected_bytes")
         verified_files = verification.get("verified_files")
         expected_files = verification.get("expected_files")
-        self._cap_upload_state_var.set(str(upload.get("state") or "-").replace("_", " ").title() if upload else "-")
+        self._cap_upload_state_var.set(self._cap_format_sds_state(upload))
         self._cap_verified_bytes_var.set(
-            f"{self._cap_format_bytes(verified_bytes)} / {self._cap_format_bytes(expected_bytes)}"
+            f"{self._cap_format_bytes(verified_bytes)} / {self._cap_format_bytes(expected_bytes)} verified"
             if verified_bytes is not None and expected_bytes is not None
             else "Checking..." if verification.get("state") == "checking" else "-"
         )
@@ -1964,6 +1973,7 @@ class MEPGui:
             else "Checking..." if verification.get("state") == "checking" else "-"
         )
         self._cap_remote_var.set(str(upload.get("remote_path") or "-") if upload else "-")
+        self._cap_render_sds_captures(upload.get("sds_captures") if upload else None)
 
         data_ready = self.archive_manager.is_available()
         upload_ready = self.upload_manager.is_available()
@@ -1973,6 +1983,7 @@ class MEPGui:
             "authenticating",
             "uploading",
             "verifying",
+            "registering",
             "stopping",
         }
         upload_state = upload.get("state") if upload else None
@@ -1998,26 +2009,55 @@ class MEPGui:
             reason = str(upload.get("error") or "Upload failed; click Upload to continue")
         elif upload_state == "stopping":
             reason = "Stop requested; waiting for the current SDK operation to return"
+        elif upload_state == "registering":
+            reason = "Registering captures on SDS"
         elif not upload_ready:
             reason = "UploadManager is unavailable"
         else:
-            reason = "Ready"
+            reason = ""
         self._cap_action_reason_var.set(reason)
+
+    def _cap_render_sds_captures(self, captures):
+        rows = tuple(sorted((str(channel), str(capture_uuid)) for channel, capture_uuid in captures.items())) if isinstance(captures, dict) else ()
+        if rows == self._cap_sds_capture_rows:
+            return
+        self._cap_sds_capture_rows = rows
+        frame = self._cap_sds_captures_frame
+        for widget in frame.winfo_children():
+            widget.destroy()
+        if not rows:
+            ttk.Label(frame, text="Capture IDs").grid(row=0, column=0, sticky="w", padx=(0, 8))
+            ttk.Label(frame, text="None confirmed").grid(row=0, column=1, sticky="w")
+        for row, (channel, capture_uuid) in enumerate(rows):
+            capture_label = ttk.Label(frame, text=f"{channel} ID")
+            capture_label.grid(row=row, column=0, sticky="w", padx=(0, 8), pady=1)
+            self._add_tooltip(capture_label, f"SDS capture UUID for DigitalRF channel {channel} in this directory.")
+            entry = ttk.Entry(frame, width=1)
+            entry.insert(0, capture_uuid)
+            entry.configure(state="readonly")
+            self._bind_copy_menu(entry, allow_paste=False)
+            entry.grid(row=row, column=1, sticky="ew", pady=1)
 
     @staticmethod
     def _cap_format_sds_state(upload):
         if not isinstance(upload, dict):
             return "-"
         state = str(upload.get("state") or "")
-        if state in {"queued", "scanning", "authenticating", "uploading", "verifying", "stopping"}:
+        if state == "registering":
+            return "Registering Captures"
+        if state in {"queued", "scanning", "authenticating", "uploading", "verifying", "stopping", "failed", "stopped", "waiting_for_credentials"}:
             return state.replace("_", " ").title()
+        if state == "error":
+            return "Cannot read status"
+        if state == "complete" and upload.get("dry_run"):
+            return "Dry Run Complete"
         verification = upload.get("verification")
         if isinstance(verification, dict):
             verification_state = str(verification.get("state") or "")
-            if verification_state in {"checking", "verified", "incomplete", "unavailable"}:
+            if verification_state == "verified":
+                return "Complete" if state == "complete" and upload.get("sds_captures") else "Files Verified"
+            if verification_state in {"checking", "incomplete", "unavailable"}:
                 return verification_state.replace("_", " ").title()
-        if state == "error":
-            return "Cannot read status"
         return state.replace("_", " ").title() or "-"
 
     def _cap_rename(self):
