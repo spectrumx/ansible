@@ -90,6 +90,12 @@
         chdir: /opt/radiohound/docker
       when: running_containers.stdout == ""
 
+    - name: Remove Orphaned Docker containers
+      shell: docker compose up -d --remove-orphans && touch /opt/clean_up_docker.flag
+      args:
+        chdir: /opt/radiohound/docker
+        creates: /opt/clean_up_docker.flag
+
     - name: copy docker-control service
       copy:
         src: "files/docker-control.service"
