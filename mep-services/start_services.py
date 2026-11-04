@@ -17,7 +17,7 @@ service_names = [unit.name for unit in units]
 service_names.remove("service-manager.service")
 for service in [*service_names, "service-manager.service"]:
     print(f"Starting {service}...", flush=True)
-    subprocess.run(["sudo", "systemctl", "restart", service], check=True)
+    subprocess.run(["sudo", "systemctl", "start", service], check=True)
 
 print("MEP services started.")
 print("Status: systemctl status <service>")
