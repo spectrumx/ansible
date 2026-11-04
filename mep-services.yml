@@ -5,3 +5,11 @@
   - name: Start non-Docker MEP services
     shell: /opt/radiohound/python313/bin/python mep-services/start_services.py 
     ignore_errors: true
+
+  - name: Link mep gui
+    ansible.builtin.file:
+      state: link
+      src: /opt/ansible/mep-services/MEPGui/mep_gui.py
+      path: /usr/local/bin/mep
+      force: true
+

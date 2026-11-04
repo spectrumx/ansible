@@ -68,6 +68,7 @@
           - python3.13
           - python3.13-dev
           - python3.13-venv
+          - python3.13-tk
           - jq
           # docker
           - nvidia-container
@@ -114,6 +115,7 @@
         - anyio
         - jsonargparse
         - msgspec
+        - pillow
         # tuner control
         - adafruit-blinka
         - pyserial
