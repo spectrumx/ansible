@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """ArchiveManager local capture inventory and deletion service."""
 
+# ============================= #
+#            IMPORTS            #
+# ============================= #
+
 from __future__ import annotations
 
 import json
@@ -16,19 +20,50 @@ import inotify.adapters
 import paho.mqtt.client as mqtt
 
 
+# ============================= #
+#         CONFIGURATION         #
+# ============================= #
+
+# Service identity and broker
 SERVICE_NAME = "archivemanager"
-DATA_ROOT = Path("/data/captures")
+MQTT_BROKER = "localhost"
+MQTT_PORT = 1883
+
+# Timing
 RECONCILE_INTERVAL_S = 3600.0
 DEBOUNCE_INTERVAL_S = 1.0
+
+# MQTT topics
 ANNOUNCE_TOPIC = f"{SERVICE_NAME}/announce"
 COMMAND_TOPIC = f"{SERVICE_NAME}/command"
 RESPONSE_TOPIC = f"{SERVICE_NAME}/response"
 STATUS_TOPIC = f"{SERVICE_NAME}/status"
 DATA_TOPIC = f"{SERVICE_NAME}/data"
 EVENT_TOPIC = f"{SERVICE_NAME}/event"
+LOG_TOPIC = f"{SERVICE_NAME}/logs"
+
+# Service-specific settings
+DATA_ROOT = Path("/data/captures")
+
 CAPTURE_ORCHESTRATOR_STATUS_TOPIC = "captureorchestrator/status"
 CAPTURE_SETTINGS_FILENAME = "capture_settings.json"
-COMMANDS = {
+
+OBSERVED_EVENTS = {
+    "IN_CLOSE_WRITE",
+    "IN_CREATE",
+    "IN_DELETE",
+    "IN_DELETE_SELF",
+    "IN_MOVED_FROM",
+    "IN_MOVED_TO",
+    "IN_MOVE_SELF",
+}
+
+
+# ============================= #
+#      COMMAND DESCRIPTIONS     #
+# ============================= #
+
+COMMAND_DESCRIPTIONS = {
     "get_status": {
         "description": "Return the current local capture inventory summary.",
         "arguments": {},
@@ -58,16 +93,10 @@ COMMANDS = {
     },
 }
 
-OBSERVED_EVENTS = {
-    "IN_CLOSE_WRITE",
-    "IN_CREATE",
-    "IN_DELETE",
-    "IN_DELETE_SELF",
-    "IN_MOVED_FROM",
-    "IN_MOVED_TO",
-    "IN_MOVE_SELF",
-}
 
+# ============================= #
+#       ARCHIVE MANAGEMENT      #
+# ============================= #
 
 class ArchiveManagerService:
     """Maintain the local capture inventory and expose it over MQTT."""
@@ -106,7 +135,7 @@ class ArchiveManagerService:
     def run(self):
         self._prepare_inventory()
         try:
-            self.client.connect("localhost", 1883, keepalive=60)
+            self.client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
             self.client.loop_forever()
         finally:
             self.close()
@@ -505,7 +534,7 @@ class ArchiveManagerService:
                 "data": DATA_TOPIC,
                 "event": EVENT_TOPIC,
             },
-            "commands": COMMANDS,
+            "commands": COMMAND_DESCRIPTIONS,
         }
 
     def _on_connect(self, client, userdata, flags, reason_code, properties):
@@ -513,10 +542,7 @@ class ArchiveManagerService:
             logging.error("MQTT connection failed: %s", reason_code)
             return
 
-        for topic in (
-            COMMAND_TOPIC,
-            CAPTURE_ORCHESTRATOR_STATUS_TOPIC,
-        ):
+        for topic in (COMMAND_TOPIC, CAPTURE_ORCHESTRATOR_STATUS_TOPIC, ):
             result, _ = client.subscribe(topic, qos=1)
             if result != mqtt.MQTT_ERR_SUCCESS:
                 logging.error("MQTT subscription failed for %s: rc=%s", topic, result)
@@ -670,6 +696,10 @@ class ArchiveManagerService:
     def _copy(value):
         return json.loads(json.dumps(value))
 
+
+# ============================= #
+#       SERVICE LIFECYCLE       #
+# ============================= #
 
 if __name__ == "__main__":
     logging.basicConfig(

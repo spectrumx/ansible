@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Background SDS uploads with state stored inside each capture directory."""
 
+# ============================= #
+#            IMPORTS            #
+# ============================= #
+
 from __future__ import annotations
 
 import contextlib
@@ -18,16 +22,32 @@ from pathlib import Path, PurePosixPath
 import paho.mqtt.client as mqtt
 
 
+# ============================= #
+#         CONFIGURATION         #
+# ============================= #
+
+# Service identity and broker
 SERVICE_NAME = "uploadmanager"
-DATA_ROOT = Path("/data/captures")
-SDS_HOST = "sds.crc.nd.edu"
-SDS_TOKEN_ENVIRONMENT = "SDS_SECRET_TOKEN"
+MQTT_BROKER = "localhost"
+MQTT_PORT = 1883
+
+# Timing
 STATUS_INTERVAL_S = 10.0
+
+# MQTT topics
 ANNOUNCE_TOPIC = f"{SERVICE_NAME}/announce"
 COMMAND_TOPIC = f"{SERVICE_NAME}/command"
 RESPONSE_TOPIC = f"{SERVICE_NAME}/response"
 STATUS_TOPIC = f"{SERVICE_NAME}/status"
+DATA_TOPIC = f"{SERVICE_NAME}/data"
 EVENT_TOPIC = f"{SERVICE_NAME}/event"
+LOG_TOPIC = f"{SERVICE_NAME}/logs"
+
+# Service-specific settings
+DATA_ROOT = Path("/data/captures")
+SDS_HOST = "sds.crc.nd.edu"
+SDS_TOKEN_ENVIRONMENT = "SDS_SECRET_TOKEN"
+
 STATUS_RELATIVE_PATH = Path("log_upload") / "upload_status.json"
 ACTIVITY_RELATIVE_PATH = Path("log_upload") / "upload_activity.jsonl"
 ACTIVITY_LIMIT = 500
@@ -47,7 +67,12 @@ ALL_STATES = ACTIVE_STATES | {
     "complete",
 }
 
-COMMANDS = {
+
+# ============================= #
+#      COMMAND DESCRIPTIONS     #
+# ============================= #
+
+COMMAND_DESCRIPTIONS = {
     "get_status": {"description": "Return upload state for local captures.", "arguments": {}},
     "get_uploads": {"description": "Return upload state for local captures.", "arguments": {}},
     "get_upload": {"description": "Return upload state for one capture.", "arguments": {"capture_name": {"type": "string", "required": True}}},
@@ -57,6 +82,10 @@ COMMANDS = {
     "stop_upload": {"description": "Stop an upload while retaining its SDS path.", "arguments": {"capture_name": {"type": "string", "required": True}}},
 }
 
+
+# ============================= #
+#         UPLOAD OUTPUT         #
+# ============================= #
 
 class UploadOutput:
     """Forward text written by the SDK as live upload activity."""
@@ -79,6 +108,10 @@ class UploadOutput:
             self.publish(self.buffer)
         self.buffer = ""
 
+
+# ============================= #
+#       UPLOAD MANAGEMENT       #
+# ============================= #
 
 class UploadManager:
     """Own upload execution and each capture's upload_status.json."""
@@ -775,7 +808,7 @@ class UploadManager:
                 "status": STATUS_TOPIC,
                 "event": EVENT_TOPIC,
             },
-            "commands": COMMANDS,
+            "commands": COMMAND_DESCRIPTIONS,
         }
 
     def publish_status(self):
@@ -802,7 +835,7 @@ class UploadManager:
         self.client.publish(topic, json.dumps(payload, separators=(",", ":")), qos=1, retain=retain)
 
     def run(self):
-        self.client.connect("localhost", 1883, keepalive=60)
+        self.client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
         self.client.loop_start()
         try:
             while self._running:
@@ -819,6 +852,10 @@ class UploadManager:
             self.client.loop_stop()
             self.client.disconnect()
 
+
+# ============================= #
+#       SERVICE LIFECYCLE       #
+# ============================= #
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")

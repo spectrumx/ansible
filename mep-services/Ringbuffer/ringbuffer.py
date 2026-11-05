@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """DigitalRF ringbuffer service exposed through MQTT."""
 
+# ============================= #
+#            IMPORTS            #
+# ============================= #
+
 import json
 import logging
 import os
@@ -17,23 +21,40 @@ try:
 except ImportError as exc:
     raise SystemExit("PyYAML is required: pip install PyYAML") from exc
 
+
+# ============================= #
+#         CONFIGURATION         #
+# ============================= #
+
+# Service identity and broker
 SERVICE_NAME = "ringbuffer"
 MQTT_BROKER = "localhost"
 MQTT_PORT = 1883
-CONFIG_PATH = os.environ.get(
-    "RINGBUFFER_CONFIG",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "ringbuffer.yaml"),
-)
+
+# Timing
 STATUS_INTERVAL_S = 10.0
 
+# MQTT topics
 ANNOUNCE_TOPIC = f"{SERVICE_NAME}/announce"
 COMMAND_TOPIC = f"{SERVICE_NAME}/command"
 RESPONSE_TOPIC = f"{SERVICE_NAME}/response"
 STATUS_TOPIC = f"{SERVICE_NAME}/status"
 DATA_TOPIC = f"{SERVICE_NAME}/data"
 EVENT_TOPIC = f"{SERVICE_NAME}/event"
+LOG_TOPIC = f"{SERVICE_NAME}/logs"
 
-COMMANDS = {
+# Service-specific settings
+CONFIG_PATH = os.environ.get(
+    "RINGBUFFER_CONFIG",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "ringbuffer.yaml"),
+)
+
+
+# ============================= #
+#      COMMAND DESCRIPTIONS     #
+# ============================= #
+
+COMMAND_DESCRIPTIONS = {
     "get_status": {
         "description": "Return the current ringbuffer state.",
         "arguments": {},
@@ -52,6 +73,10 @@ COMMANDS = {
     },
 }
 
+
+# ============================= #
+#      RINGBUFFER LIFECYCLE     #
+# ============================= #
 
 class Ringbuffer:
     """Small lifecycle wrapper around DigitalRFRingbuffer."""
@@ -83,6 +108,10 @@ class Ringbuffer:
             "error": self._last_error,
         }
 
+
+# ============================= #
+#          MQTT SERVICE         #
+# ============================= #
 
 class RingbufferService:
     def __init__(self, broker: str = MQTT_BROKER, port: int = MQTT_PORT, config_path: str = CONFIG_PATH):
@@ -212,7 +241,7 @@ class RingbufferService:
                 "data": DATA_TOPIC,
                 "event": EVENT_TOPIC,
             },
-            "commands": COMMANDS,
+            "commands": COMMAND_DESCRIPTIONS,
             "ringbuffers": {
                 name: dict(instance.config, path=instance.path, enabled=instance.enabled)
                 for name, instance in self.ringbuffers.items()
@@ -262,6 +291,10 @@ class RingbufferService:
             for ringbuffer in self.ringbuffers.values():
                 ringbuffer.stop()
 
+
+# ============================= #
+#       SERVICE LIFECYCLE       #
+# ============================= #
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")

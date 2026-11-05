@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Systemd service lifecycle and journal access exposed through MQTT."""
 
+# ============================= #
+#            IMPORTS            #
+# ============================= #
+
 import json
 import logging
 import os
@@ -14,19 +18,29 @@ from typing import Optional
 import paho.mqtt.client as mqtt
 
 
+# ============================= #
+#         CONFIGURATION         #
+# ============================= #
+
+# Service identity and broker
 SERVICE_NAME = "servicemanager"
 MQTT_BROKER = "localhost"
 MQTT_PORT = 1883
+
+# Timing
 STATUS_INTERVAL_S = 5.0
 COMMAND_TIMEOUT_S = 30.0
 
+# MQTT topics
 ANNOUNCE_TOPIC = f"{SERVICE_NAME}/announce"
 COMMAND_TOPIC = f"{SERVICE_NAME}/command"
 RESPONSE_TOPIC = f"{SERVICE_NAME}/response"
 STATUS_TOPIC = f"{SERVICE_NAME}/status"
+DATA_TOPIC = f"{SERVICE_NAME}/data"
 EVENT_TOPIC = f"{SERVICE_NAME}/event"
 LOG_TOPIC = f"{SERVICE_NAME}/logs"
 
+# Service-specific settings
 MANAGED_UNITS = (
     "afe-control.service",
     "archive-manager.service",
@@ -44,6 +58,11 @@ SERVICE_ACTIONS = {
     "restart_services": "restart",
 }
 
+
+# ============================= #
+#      COMMAND DESCRIPTIONS     #
+# ============================= #
+
 COMMAND_DESCRIPTIONS = {
     "get_status": {"description": "Refresh and return managed systemd unit state.", "arguments": {}},
     "start_services": {"description": "Start selected managed units.", "arguments": {"services": {"type": "array", "required": True}}},
@@ -54,6 +73,10 @@ COMMAND_DESCRIPTIONS = {
     "stop_log_stream": {"description": "Stop a journal stream by ID.", "arguments": {"stream_id": {"type": "string", "required": True}}},
 }
 
+
+# ============================= #
+#       SYSTEMD OPERATIONS      #
+# ============================= #
 
 class CommandError(RuntimeError):
     """A command failed with details suitable for an MQTT response."""
@@ -230,6 +253,10 @@ class ServiceManager:
             self.stop_log_stream(stream_id)
 
 
+# ============================= #
+#          MQTT SERVICE         #
+# ============================= #
+
 class ServiceManagerService:
     """MQTT adapter and command worker for ServiceManager."""
 
@@ -378,6 +405,10 @@ class ServiceManagerService:
         self.manager.close()
         self.client.disconnect()
 
+
+# ============================= #
+#       SERVICE LIFECYCLE       #
+# ============================= #
 
 def main():
     logging.basicConfig(

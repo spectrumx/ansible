@@ -6,6 +6,10 @@
 Author: John Marino <john.marino@colorado.edu> (09/2026)
 """
 
+# ============================= #
+#            IMPORTS            #
+# ============================= #
+
 import logging
 import os
 import socket
@@ -15,23 +19,39 @@ import aiomqtt
 import anyio
 import msgspec
 
+
+# ============================= #
+#         CONFIGURATION         #
+# ============================= #
+
+# Service identity and broker
 SERVICE_NAME = "tunercontrol"
+MQTT_BROKER = "localhost"
+MQTT_PORT = 1883
+
+# MQTT topics
 ANNOUNCE_TOPIC = f"{SERVICE_NAME}/announce"
 COMMAND_TOPIC = f"{SERVICE_NAME}/command"
 RESPONSE_TOPIC = f"{SERVICE_NAME}/response"
 STATUS_TOPIC = f"{SERVICE_NAME}/status"
 DATA_TOPIC = f"{SERVICE_NAME}/data"
 EVENT_TOPIC = f"{SERVICE_NAME}/event"
+LOG_TOPIC = f"{SERVICE_NAME}/logs"
 
-# Connect to the MQTT broker running on this device.
-MQTT_BROKER = "localhost"
-MQTT_PORT = 1883
+
+# ============================= #
+#            LOGGING            #
+# ============================= #
 
 logger = logging.getLogger(SERVICE_NAME)
 logger.setLevel(logging.INFO)
 logger.propagate = False
 logger.addHandler(logging.StreamHandler())
 
+
+# ============================= #
+#         TUNER CONTROL         #
+# ============================= #
 
 class TunerControlService:
     def __init__(self):
@@ -234,6 +254,10 @@ class TunerControlService:
             finally:
                 self.close()
 
+
+# ============================= #
+#       SERVICE LIFECYCLE       #
+# ============================= #
 
 if __name__ == "__main__":
     logger.info("Starting TunerControl")

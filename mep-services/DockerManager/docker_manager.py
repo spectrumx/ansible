@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Docker and Docker Compose management exposed through MQTT."""
 
+# ============================= #
+#            IMPORTS            #
+# ============================= #
+
 import json
 import logging
 import os
@@ -15,19 +19,30 @@ from typing import Optional
 import paho.mqtt.client as mqtt
 
 
+# ============================= #
+#         CONFIGURATION         #
+# ============================= #
+
+# Service identity and broker
 SERVICE_NAME = "dockermanager"
 MQTT_BROKER = "localhost"
 MQTT_PORT = 1883
-COMPOSE_DIRECTORY = "/opt/radiohound/docker"
+
+# Timing
 STATUS_INTERVAL_S = 5.0
 COMMAND_TIMEOUT_S = 120.0
 
+# MQTT topics
 ANNOUNCE_TOPIC = f"{SERVICE_NAME}/announce"
 COMMAND_TOPIC = f"{SERVICE_NAME}/command"
 RESPONSE_TOPIC = f"{SERVICE_NAME}/response"
 STATUS_TOPIC = f"{SERVICE_NAME}/status"
+DATA_TOPIC = f"{SERVICE_NAME}/data"
 EVENT_TOPIC = f"{SERVICE_NAME}/event"
 LOG_TOPIC = f"{SERVICE_NAME}/logs"
+
+# Service-specific settings
+COMPOSE_DIRECTORY = "/opt/radiohound/docker"
 
 SERVICE_ACTIONS = {
     "start_services": "start",
@@ -39,6 +54,11 @@ PROJECT_ACTIONS = {
     "pull_project": "pull",
 }
 SERVICE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+
+
+# ============================= #
+#      COMMAND DESCRIPTIONS     #
+# ============================= #
 
 COMMAND_DESCRIPTIONS = {
     "get_status": {"description": "Refresh and return Docker and Compose state.", "arguments": {}},
@@ -54,6 +74,10 @@ COMMAND_DESCRIPTIONS = {
     "stop_log_stream": {"description": "Stop a Compose log stream by ID.", "arguments": {"stream_id": {"type": "string", "required": True}}},
 }
 
+
+# ============================= #
+#       DOCKER OPERATIONS       #
+# ============================= #
 
 class CommandError(RuntimeError):
     """A command failed with details suitable for an MQTT response."""
@@ -318,6 +342,10 @@ class DockerManager:
             self.stop_log_stream(stream_id)
 
 
+# ============================= #
+#          MQTT SERVICE         #
+# ============================= #
+
 class DockerManagerService:
     """MQTT adapter and command worker for DockerManager."""
 
@@ -471,6 +499,10 @@ class DockerManagerService:
         self.manager.close()
         self.client.disconnect()
 
+
+# ============================= #
+#       SERVICE LIFECYCLE       #
+# ============================= #
 
 def main():
     logging.basicConfig(

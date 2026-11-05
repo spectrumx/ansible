@@ -28,11 +28,13 @@ from mep_client import MEPClient
 # Defaults preserve the legacy MAC-selection and direct-broker conventions.
 # Set overrides only when the site uses a different identity or endpoint.
 NODE_ID = ""
+
 # Default display name: MEP-<last four ID digits>.
 NODE_NAME = ""
 LOCAL_HOST = "localhost"
 LOCAL_PORT = 1883
 REMOTE_HOST = ""
+
 # Optional read-only host path to an existing system.json.
 SYSTEM_CONFIG_FILE = None
 DEFAULT_REMOTE_HOST = "radiohound.ee.nd.edu"
@@ -59,6 +61,7 @@ WORKFLOW_FIELDS = ("state", "operation", "signal_path", "frequency_hz", "capture
 # ============================= #
 #       STATUS TRANSLATION      #
 # ============================= #
+
 
 def status_value(value):
     """Limit projected status to finite JSON values of bounded size."""
@@ -151,6 +154,7 @@ def node_id_from_host(payload):
 # ============================= #
 #         LATEST STATUS         #
 # ============================= #
+
 
 class StatusSnapshot:
     """Fixed-size latest-state cache shared by local and remote workers."""
@@ -293,8 +297,9 @@ class StatusSnapshot:
         return {"message": "ANNOUNCE", "payload": node_fields}
 
 # ============================= #
-#        LOCAL OBSERVATION      #
+#       LOCAL OBSERVATION       #
 # ============================= #
+
 
 def observe_local(snapshot, stopping, client_factory=MEPClient):
     """Observe status and spectrum; recreate our client if connection stays down.
@@ -311,6 +316,7 @@ def observe_local(snapshot, stopping, client_factory=MEPClient):
             client.host.on_status(snapshot.host_status)
             client.afe.on_gnss(lambda payload: snapshot.update("gnss", payload))
             client.spectrum.on_source_message(snapshot.source_message)
+
             # This only subscribes to existing data; it does not start acquisition.
             client.spectrum.start()
             for name, component in (
@@ -344,8 +350,9 @@ def observe_local(snapshot, stopping, client_factory=MEPClient):
                     logger.warning("Could not close local status client")
 
 # ============================= #
-#        REMOTE PUBLICATION     #
+#       REMOTE PUBLICATION      #
 # ============================= #
+
 
 def remote_client(node_id, connected_event):
     """Create the publish-only remote client; never subscribe to commands."""
@@ -377,8 +384,9 @@ def remote_client(node_id, connected_event):
     return client
 
 # ============================= #
-#         SERVICE LIFECYCLE     #
+#       SERVICE LIFECYCLE       #
 # ============================= #
+
 
 def run():
     stopping = threading.Event()
@@ -429,6 +437,7 @@ def run():
         connected_event = threading.Event()
         remote = remote_client(node_id, connected_event)
         topic = f"radiohound/clients/announce/{node_id}"
+
         # connect_async keeps DNS/connect/retry work off the local observer thread.
         remote.connect_async(host, REMOTE_PORT, keepalive=30)
         remote.loop_start()

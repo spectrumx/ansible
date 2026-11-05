@@ -30,6 +30,10 @@
 #   python afe_service.py
 #   python afe_service.py --mqtt_host=... --gpsd_host=... (see --help for all fields)
 
+# ============================= #
+#            IMPORTS            #
+# ============================= #
+
 import csv
 import dataclasses
 import json
@@ -47,9 +51,9 @@ import exceptiongroup
 import jsonargparse
 import msgspec
 
-# ============================================================================
-# LOGGING
-# ============================================================================
+# ============================= #
+#            LOGGING            #
+# ============================= #
 
 logger = logging.getLogger("afe_service")
 logger.setLevel(os.environ.get("AFE_SERVICE_LOG_LEVEL", "INFO"))
@@ -65,9 +69,9 @@ def _log_mode() -> str:
     return "debug" if logger.getEffectiveLevel() <= logging.DEBUG else "normal"
 
 
-# ============================================================================
-# CONSTANTS
-# ============================================================================
+# ============================= #
+#         CONFIGURATION         #
+# ============================= #
 
 _GPSD_SOCK_PATH = "/var/run/gpsd.sock"
 _GPSD_WATCH_CMD = b'?WATCH={"enable":true,"raw":1};\r\n'
@@ -83,9 +87,9 @@ _GPSD_STATUS_HEARTBEAT_S = 5.0
 _RAW_STREAM_DEFAULT_DURATION_S = 10.0
 _RAW_STREAM_MAX_DURATION_S = 60.0
 
-# ============================================================================
-# SOURCE-OF-TRUTH TABLES
-# ============================================================================
+# ============================= #
+#     SOURCE-OF-TRUTH TABLES    #
+# ============================= #
 # !!!! WARNING !!!!!
 # These tables are convenience copies for the MQTT API.
 # The actual source of truth for register mappings, pin names, and defaults
@@ -151,19 +155,19 @@ _DEVICES = {
 # ---- IMU ODR table (names match controller.py odrDictList exactly) ----
 
 _IMU_ODR_TABLE = [
-    {"name": "ODR_OFF",         "label": "Off",                       "hz":    0,   "acc": True,  "gyr": True },
+    {"name": "ODR_OFF",         "label": "Off",                       "hz":    0,   "acc": True,  "gyr": True},
     {"name": "ACC_1_6_HZ_ULP",  "label": "1.6 Hz (Ultra-Low-Power)", "hz":    1.6, "acc": True,  "gyr": False},
-    {"name": "GYR_6_5_HZ_LP",   "label": "6.5 Hz (Low-Power)",       "hz":    6.5, "acc": False, "gyr": True },
-    {"name": "ODR_12_5_HZ_LP",  "label": "12.5 Hz (Low-Power)",      "hz":   12.5, "acc": True,  "gyr": True },
-    {"name": "ODR_26_HZ_LP",    "label": "26 Hz (Low-Power)",        "hz":   26,   "acc": True,  "gyr": True },
-    {"name": "ODR_52_HZ_NP",    "label": "52 Hz (Normal)",           "hz":   52,   "acc": True,  "gyr": True },
-    {"name": "ODR_104_HZ_NP",   "label": "104 Hz (Normal)",          "hz":  104,   "acc": True,  "gyr": True },
-    {"name": "ODR_208_HZ_HP",   "label": "208 Hz (High-Perf)",       "hz":  208,   "acc": True,  "gyr": True },
-    {"name": "ODR_416_HZ_HP",   "label": "416 Hz (High-Perf)",       "hz":  416,   "acc": True,  "gyr": True },
-    {"name": "ODR_833_HZ_HP",   "label": "833 Hz (High-Perf)",       "hz":  833,   "acc": True,  "gyr": True },
-    {"name": "ODR_1_66_KHZ_HP", "label": "1.66 kHz (High-Perf)",     "hz": 1660,   "acc": True,  "gyr": True },
-    {"name": "ODR_3_33_KHZ_HP", "label": "3.33 kHz (High-Perf)",     "hz": 3330,   "acc": True,  "gyr": True },
-    {"name": "ODR_6_66_KHZ_HP", "label": "6.66 kHz (High-Perf)",     "hz": 6660,   "acc": True,  "gyr": True },
+    {"name": "GYR_6_5_HZ_LP",   "label": "6.5 Hz (Low-Power)",       "hz":    6.5, "acc": False, "gyr": True},
+    {"name": "ODR_12_5_HZ_LP",  "label": "12.5 Hz (Low-Power)",      "hz":   12.5, "acc": True,  "gyr": True},
+    {"name": "ODR_26_HZ_LP",    "label": "26 Hz (Low-Power)",        "hz":   26,   "acc": True,  "gyr": True},
+    {"name": "ODR_52_HZ_NP",    "label": "52 Hz (Normal)",           "hz":   52,   "acc": True,  "gyr": True},
+    {"name": "ODR_104_HZ_NP",   "label": "104 Hz (Normal)",          "hz":  104,   "acc": True,  "gyr": True},
+    {"name": "ODR_208_HZ_HP",   "label": "208 Hz (High-Perf)",       "hz":  208,   "acc": True,  "gyr": True},
+    {"name": "ODR_416_HZ_HP",   "label": "416 Hz (High-Perf)",       "hz":  416,   "acc": True,  "gyr": True},
+    {"name": "ODR_833_HZ_HP",   "label": "833 Hz (High-Perf)",       "hz":  833,   "acc": True,  "gyr": True},
+    {"name": "ODR_1_66_KHZ_HP", "label": "1.66 kHz (High-Perf)",     "hz": 1660,   "acc": True,  "gyr": True},
+    {"name": "ODR_3_33_KHZ_HP", "label": "3.33 kHz (High-Perf)",     "hz": 3330,   "acc": True,  "gyr": True},
+    {"name": "ODR_6_66_KHZ_HP", "label": "6.66 kHz (High-Perf)",     "hz": 6660,   "acc": True,  "gyr": True},
 ]
 
 # ---- IMU mode settings ----
@@ -259,9 +263,9 @@ _DATA_FIELDS_HK = [
 _TIME_SOURCE_LABELS = {0: "NOTSET", 1: "GNSS", 2: "EXTERNAL"}
 _TIME_EPOCH_LABELS  = {0: "NOTSET", 1: "PPS",  2: "NMEA", 3: "IMMEDIATE"}
 
-# ============================================================================
-# DERIVED LOOKUPS (computed once from source tables — never duplicated)
-# ============================================================================
+# ======================================================================= #
+#  DERIVED LOOKUPS (COMPUTED ONCE FROM SOURCE TABLES — NEVER DUPLICATED)  #
+# ======================================================================= #
 
 _ALL_DEVICES     = list(_DEVICES)
 _RX_DEVICES      = [d for d in _DEVICES if d.startswith("rx")]
@@ -287,9 +291,10 @@ _REG_PINS  = {
     for dev, info in _DEVICES.items()
 }
 
-# ============================================================================
-# STATE (derived from data-field tables — single source of truth)
-# ============================================================================
+# ================================================================= #
+#  STATE (DERIVED FROM DATA-FIELD TABLES — SINGLE SOURCE OF TRUTH)  #
+# ================================================================= #
+
 
 def _make_buf(fields, extras=None, timestamps=("timestamp",)):
     """Buffer whose key order is the authoritative CSV/JSON column order.
@@ -393,9 +398,9 @@ _buf_hk  = _make_buf(_DATA_FIELDS_HK, extras={"time_source": None, "time_epoch":
 _CSV_HEADER = (
     ["snapshot_utc"]
     + [f"gnss_{k}" for k in _buf_gps]
-    + [f"mag_{k}"  for k in _buf_mag]
-    + [f"imu_{k}"  for k in _buf_imu]
-    + [f"hk_{k}"   for k in _buf_hk]
+    + [f"mag_{k}" for k in _buf_mag]
+    + [f"imu_{k}" for k in _buf_imu]
+    + [f"hk_{k}" for k in _buf_hk]
     + ["registers_json"]
 )
 
@@ -440,8 +445,12 @@ _gpsd_status = {
 _raw_stream_deadline_monotonic = None
 
 _startup_queries_sent = False
-_log_rate_changed = None  # Event: set when log rate changes, wakes _emit_csv
-_poll_interval_changed = None  # Event: set when poll interval changes, wakes _poll_telem
+
+# Event: set when log rate changes, wakes _emit_csv
+_log_rate_changed = None
+
+# Event: set when poll interval changes, wakes _poll_telem
+_poll_interval_changed = None
 
 # GNRMC identifies the start of each receiver epoch. The next distinct RMC commits
 # the completed prior epoch; this timeout only flushes the final epoch if input stalls.
@@ -451,9 +460,10 @@ _gps_epoch_started_monotonic = None
 _gps_epoch_active = False
 _gps_last_committed_epoch_key = None
 
-# ============================================================================
-# DESCRIBE SCHEMAS (built from source tables — zero hand-duplicated args)
-# ============================================================================
+# ========================================================================= #
+#  DESCRIBE SCHEMAS (BUILT FROM SOURCE TABLES — ZERO HAND-DUPLICATED ARGS)  #
+# ========================================================================= #
+
 
 def _imu_set_args():
     args = {
@@ -595,7 +605,8 @@ _DESC_TIME = {
 
 _DESC_LOGGING = {
     "subtopic": "logging",
-    "reference": {"log_mode_options": _LOG_MODE_OPTS},  # log_rate_current added dynamically in _send_announce
+    # log_rate_current added dynamically in _send_announce
+    "reference": {"log_mode_options": _LOG_MODE_OPTS},
     "commands": {
         "configure":            {"description": "Validate and apply telemetry logging configuration.",
                                  "arguments": {
@@ -650,9 +661,9 @@ def _command_topic_map(base):
             for s, d in _DESCRIBE.items()}
 
 
-# ============================================================================
-# NMEA HELPERS
-# ============================================================================
+# ============================= #
+#          NMEA HELPERS         #
+# ============================= #
 
 def _nmea_xor(data):
     r = 0
@@ -695,9 +706,9 @@ def _ddmm_to_dec(ddmm, hemi):
     return round(-dec if hemi in ("S", "W") else dec, 6)
 
 
-# ============================================================================
-# COMMAND HANDLERS
-# ============================================================================
+# ============================= #
+#        COMMAND HANDLERS       #
+# ============================= #
 
 def _cmd_registers(task_name, args):
     cmds = []
@@ -721,7 +732,7 @@ def _cmd_registers(task_name, args):
             raise ValueError(f"{dev!r} is not an RX device. Valid: {_RX_DEVICES}")
         if not 0 <= db <= 31:
             raise ValueError(f"attenuation must be 0..31 dB, got {db}")
-        cmds.append(_nmea_cksum(f"${_DEVICES[dev]['prefix']},4,{','.join(str((db>>i)&1) for i in range(5))}*"))
+        cmds.append(_nmea_cksum(f"${_DEVICES[dev]['prefix']},4,{','.join(str((db >> i) & 1) for i in range(5))}*"))
 
     elif task_name == "get_registers":
         dev = str(args.get("device", "all")).lower().strip()
@@ -847,7 +858,7 @@ def _cmd_time(task_name, args):
         commands.append(_nmea_cksum("$PMITTP?*"))
         return commands
     _map = {
-        "get_time_params":     lambda: _nmea_cksum("$PMITTP?*"),
+        "get_time_params": lambda: _nmea_cksum("$PMITTP?*"),
     }
     if task_name not in _map:
         raise ValueError(f"Unknown time command: {task_name!r}")
@@ -859,6 +870,7 @@ _HANDLERS = {
     "mag": _cmd_mag, "hk": _cmd_hk, "time": _cmd_time,
 }
 
+
 def _effective_poll_interval_s():
     v = _params["rates"].get("poll_interval_s")
     return int(v) if v is not None else 0
@@ -867,9 +879,10 @@ def _effective_poll_interval_s():
 def _set_poll_interval_s(n):
     _params["rates"]["poll_interval_s"] = int(n)
 
-# ============================================================================
-# GPSD INTERFACE
-# ============================================================================
+# ============================= #
+#         GPSD INTERFACE        #
+# ============================= #
+
 
 class GPSDTransport:
     """Raw GPSD stream and serialized writes to the AFE UART."""
@@ -918,34 +931,45 @@ class GPSDTransport:
             raise RuntimeError(f"gpsd: unexpected reply {reply!r} for {nmea!r}")
 
 
-# ============================================================================
-# NMEA PARSERS
-# ============================================================================
+# ============================= #
+#          NMEA PARSERS         #
+# ============================= #
 
 def _parse_gnrmc(line):
     try:
         parts = line.split("*")[0].split(",")
         fix = len(parts) > 2 and parts[2] == "A"
+
         # timestamp is the time *of this fix*; without a fix there isn't one, so it is
         # cleared rather than left carrying the last good value.
         u = {"fix_valid": fix, "timestamp": None, "lat": None, "lon": None,
              "service_timestamp": time.time()}
         if fix and len(parts) >= 10 and parts[1] and parts[9]:
-            try: u["timestamp"] = _nmea_to_epoch(parts[1], parts[9])
-            except ValueError: pass
+            try:
+                u["timestamp"] = _nmea_to_epoch(parts[1], parts[9])
+            except ValueError:
+                pass
         if fix and len(parts) > 4 and parts[3] and parts[4]:
-            try: u["lat"] = _ddmm_to_dec(parts[3], parts[4])
-            except ValueError: pass
+            try:
+                u["lat"] = _ddmm_to_dec(parts[3], parts[4])
+            except ValueError:
+                pass
         if fix and len(parts) > 6 and parts[5] and parts[6]:
-            try: u["lon"] = _ddmm_to_dec(parts[5], parts[6])
-            except ValueError: pass
+            try:
+                u["lon"] = _ddmm_to_dec(parts[5], parts[6])
+            except ValueError:
+                pass
         if len(parts) > 7 and parts[7]:
-            try: u["speed_knots"] = float(parts[7])
-            except ValueError: pass
+            try:
+                u["speed_knots"] = float(parts[7])
+            except ValueError:
+                pass
         u["track_true_deg"] = None
         if len(parts) > 8 and parts[8]:
-            try: u["track_true_deg"] = float(parts[8])
-            except ValueError: pass
+            try:
+                u["track_true_deg"] = float(parts[8])
+            except ValueError:
+                pass
         u["magnetic_variation_deg"] = None
         if len(parts) > 11 and parts[10]:
             try:
@@ -972,8 +996,10 @@ def _parse_gngga(line):
                                 (13, "differential_age_s", float),
                                 (14, "differential_station_id", str)]:
             if len(parts) > idx and parts[idx]:
-                try: u[key] = cast(parts[idx])
-                except ValueError: pass
+                try:
+                    u[key] = cast(parts[idx])
+                except ValueError:
+                    pass
         if u["altitude_msl_m"] is not None and u["geoid_separation_m"] is not None:
             u["altitude_hae_m"] = u["altitude_msl_m"] + u["geoid_separation_m"]
         _pending_gps.update(u)
@@ -988,8 +1014,10 @@ def _parse_gngsa(line):
         for idx, key, cast in [(2, "fix_mode", int), (15, "pdop", float),
                                (16, "hdop", float), (17, "vdop", float)]:
             if len(parts) > idx and parts[idx]:
-                try: u[key] = cast(parts[idx])
-                except ValueError: pass
+                try:
+                    u[key] = cast(parts[idx])
+                except ValueError:
+                    pass
         system_id = int(parts[18]) if len(parts) > 18 and parts[18] else None
         constellation = {1: "gps", 2: "glonass", 3: "galileo", 4: "beidou"}.get(system_id)
         if constellation:
@@ -1004,8 +1032,7 @@ def _parse_gsv(line):
     try:
         parts = line.split("*")[0].split(",")
         talker = parts[0][1:3]
-        constellation = {"GP": "gps", "GL": "glonass", "GA": "galileo",
-                         "GB": "beidou", "BD": "beidou"}.get(talker)
+        constellation = {"GP": "gps", "GL": "glonass", "GA": "galileo", "GB": "beidou", "BD": "beidou"}.get(talker)
         if not constellation:
             return
         observations = parts[4:]
@@ -1114,9 +1141,9 @@ def _parse_pmitsr(line):
         return None
 
 
-# ============================================================================
-# GPSD MONITOR + NMEA DISPATCH
-# ============================================================================
+# ============================== #
+#  GPSD MONITOR + NMEA DISPATCH  #
+# ============================== #
 
 async def _monitor_gpsd(client, service):
     global _startup_queries_sent
@@ -1140,6 +1167,7 @@ async def _monitor_gpsd(client, service):
 
                 if not _startup_queries_sent:
                     ok = True
+
                     # Apply service-owned register overrides at startup before normal state queries.
                     startup_register_defaults = _service_default_register_commands(include_readback=True)
                     for idx, cmd in enumerate(startup_register_defaults):
@@ -1164,6 +1192,7 @@ async def _monitor_gpsd(client, service):
                             cmd = _nmea_cksum(q)
                             await service.gpsd.send_firmware_command(cmd)
                             logger.info(f"Startup query sent: {cmd}")
+
                             # Avoid bursting startup queries too quickly.
                             if idx < len(startup_queries) - 1:
                                 await anyio.sleep(_REGISTER_QUERY_GAP_S)
@@ -1337,9 +1366,9 @@ async def _dispatch_nmea(client, service, line):
         logger.debug(f"Dispatch error: {line!r}", exc_info=True)
 
 
-# ============================================================================
-# MQTT PUBLISH
-# ============================================================================
+# ============================= #
+#          MQTT PUBLISH         #
+# ============================= #
 
 _seq = 0
 _seq_reg = 0
@@ -1438,7 +1467,7 @@ async def _send_announce(client, service):
     polling_ref["poll_interval_current"] = _effective_poll_interval_s()
     polling_desc["reference"] = polling_ref
     describe["polling"] = polling_desc
-    
+
     await client.publish(service.topic_announce, msgspec.json.encode({
         "title": "AFE service",
         "description": "Control and monitor MEP analog front-end instrument (RP2040)",
@@ -1496,9 +1525,9 @@ async def _send_response(client, service, resp, cmd=None, subtopic=""):
     await client.publish(topic, msgspec.json.encode(envelope))
 
 
-# ============================================================================
-# COMMAND PROCESSING
-# ============================================================================
+# ============================= #
+#       COMMAND PROCESSING      #
+# ============================= #
 
 def _register_value_or_preserve(value):
     if isinstance(value, str) and value.lower().strip() == "x":
@@ -1615,6 +1644,7 @@ async def _dispatch_register_set_registers(client, service, args, payload):
                              {"state": "ok", "message": "'set_registers' accepted", "commands_sent": len(nmea_list)},
                              payload, "registers")
 
+
 async def _dispatch_nmea_cmd(client, service, handler, task_name, args, payload, subtopic=""):
     try:
         nmea_list = handler(task_name, args)
@@ -1686,7 +1716,9 @@ async def _service_set_interval(client, service, args, payload):
         return
 
     _set_poll_interval_s(n)
-    _poll_interval_changed.set()  # Wake _poll_telem immediately
+
+    # Wake _poll_telem immediately
+    _poll_interval_changed.set()
     await _send_response(client, service,
                          {
                              "state": "ok",
@@ -1876,6 +1908,7 @@ async def _poll_telem(client, service):
             if _USE_SERVICE_TELEM_WORKAROUND and interval > 0:
                 cmd = _nmea_cksum("$TELEM?*")
                 await service.gpsd.send_firmware_command(cmd)
+
                 # Sleep until interval expires OR poll_interval changes.
                 # anyio.Event is one-shot (no .clear()) — re-arm with a fresh instance.
                 _poll_interval_changed = anyio.Event()
@@ -1956,14 +1989,17 @@ async def _process_commands(client, service):
 
         except Exception:
             logger.exception(f"Error processing {message.topic}")
-            try: cp = msgspec.json.decode(message.payload) if message.payload else {}
-            except Exception: cp = {}
+            try:
+                cp = msgspec.json.decode(message.payload) if message.payload else {}
+            except Exception:
+                cp = {}
             se = ""
             try:
                 ft2 = str(message.topic)
                 if ft2.startswith(service.topic_command + "/"):
                     se = ft2[len(service.topic_command)+1:]
-            except Exception: pass
+            except Exception:
+                pass
             await _send_response(client, service, {"exception": traceback.format_exc()}, cp, se)
 
 
@@ -2029,9 +2065,9 @@ async def _handle_logging(client, service, tn, args, payload):
         await _send_response(client, service, {"exception": f"Unknown logging command: {tn!r}"}, payload, s)
 
 
-# ============================================================================
-# SERVICE CLASS
-# ============================================================================
+# ============================= #
+#         SERVICE CLASS         #
+# ============================= #
 
 @dataclasses.dataclass(kw_only=True)
 class AFEControlService:
@@ -2080,16 +2116,18 @@ class AFEControlService:
         self.topic_data_raw         = f"{n}/data/raw"
 
 
-# ============================================================================
-# CSV LOGGING
-# ============================================================================
+# ============================= #
+#          CSV LOGGING          #
+# ============================= #
 
 # Persistent handle for the always-on telemetry log. Reopened only when the
 # log directory or calendar day changes; every row is fsynced individually,
 # so durability never depends on this handle surviving to be closed cleanly.
 _csv_fh = None
 _csv_writer = None
-_csv_key = None  # (log_dir, date_str) the open handle corresponds to
+
+# (log_dir, date_str) the open handle corresponds to
+_csv_key = None
 
 
 def _csv_close():
@@ -2159,7 +2197,9 @@ async def _emit_csv(service):
                     row.append(json.dumps(_reg["registers"], sort_keys=True, separators=(",", ":")))
                     _csv_writer.writerow(row)
                     _csv_fh.flush()
-                    os.fsync(_csv_fh.fileno())  # durable now, not "whenever the OS gets to it"
+
+                    # durable now, not "whenever the OS gets to it"
+                    os.fsync(_csv_fh.fileno())
                     logger.debug(f"Telemetry logged: {_csv_key}")
                 except Exception:
                     logger.exception("CSV write error")
@@ -2170,12 +2210,13 @@ async def _emit_csv(service):
             with anyio.move_on_after(rate):
                 await _log_rate_changed.wait()
     finally:
-        _csv_close()  # best-effort tidy-up only; durability is already guaranteed per-row above
+        # best-effort tidy-up only; durability is already guaranteed per-row above
+        _csv_close()
 
 
-# ============================================================================
-# MAIN
-# ============================================================================
+# ============================= #
+#              MAIN             #
+# ============================= #
 
 async def main(service):
     global _log_rate_changed, _poll_interval_changed

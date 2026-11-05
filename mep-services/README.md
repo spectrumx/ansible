@@ -55,6 +55,54 @@ request `session_id` and are not retained.
 
 The individual component READMEs describe exceptions and detailed payloads.
 
+## Service source convention
+
+Keep module-level settings together under one `CONFIGURATION` banner.
+Use short comments within it for these groups:
+
+1. Service identity and MQTT broker settings.
+2. Timing settings, preserving the intervals and timeouts each service needs.
+3. The canonical MQTT topic block.
+4. Service-specific settings.
+
+Large static command descriptions follow configuration under their own banner.
+Hardware reference tables and schemas may also retain separate sections.
+Preserve initialization dependencies when grouping settings.
+
+Topic constants follow this complete block, including reserved topics:
+
+```python
+ANNOUNCE_TOPIC = f"{SERVICE_NAME}/announce"
+COMMAND_TOPIC = f"{SERVICE_NAME}/command"
+RESPONSE_TOPIC = f"{SERVICE_NAME}/response"
+STATUS_TOPIC = f"{SERVICE_NAME}/status"
+DATA_TOPIC = f"{SERVICE_NAME}/data"
+EVENT_TOPIC = f"{SERVICE_NAME}/event"
+LOG_TOPIC = f"{SERVICE_NAME}/logs"
+```
+
+A constant establishes the topic's canonical name; it does not imply that a
+service publishes there. Reserved topics remain in the source boilerplate.
+Announcements describe the service's existing interface; adding a reserved
+constant does not add an announcement field, publisher, or subscription.
+
+Use `SERVICE_NAME`, `MQTT_BROKER`, and `MQTT_PORT` for the common settings.
+Timing names include their units, such as `STATUS_INTERVAL_S` and
+`COMMAND_TIMEOUT_S`. Event-driven services need not define an unused periodic
+status interval or command timeout.
+
+Static command metadata uses `COMMAND_DESCRIPTIONS` internally and remains
+under `"commands"` in announcements. Each command retains its existing
+description and argument schema. AFEControl's structured descriptions and
+TunerControl's hardware-dependent command list retain their existing forms.
+
+AFEControl's configured topic hierarchy, RadiohoundGateway's external
+compatibility interface, and MEPGui's client role have different requirements;
+they do not need the manager-service configuration layout. Services remain
+independent, with no shared service base class or new runtime dependency.
+Message schemas, command names, QoS, retention, and lifecycle behavior remain
+defined by the existing service contracts.
+
 ## Spectrum client
 
 `MEPClient.spectrum` exposes two callback interfaces on one subscription:

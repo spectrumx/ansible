@@ -13,6 +13,10 @@ Usage:
 Author: john.marino@colorado.edu
 """
 
+# ============================= #
+#            IMPORTS            #
+# ============================= #
+
 import sys
 import os
 import argparse
@@ -36,6 +40,13 @@ MEP_SERVICES_ROOT = str(Path(__file__).resolve().parent.parent)
 sys.path.insert(0, MEP_SERVICES_ROOT)
 from mep_client import MEPClient
 
+
+# ============================= #
+#         CONFIGURATION         #
+# ============================= #
+
+# Client defaults
+
 CHANNEL_OPTIONS = MEPClient.CHANNEL_OPTIONS
 RECORDER_CHANNEL_PORTS = MEPClient.RECORDER_CHANNEL_PORTS
 CONJUGATE_POLICY_DEFAULT = MEPClient.CONJUGATE_POLICY_DEFAULT
@@ -44,7 +55,7 @@ TX_CHANNEL_OPTIONS = MEPClient.TX_CHANNEL_OPTIONS
 TX_OFFSET_FREQ_MAX_MHZ = MEPClient.TX_OFFSET_FREQ_MAX_MHZ
 TX_AMPLITUDE_BINS_MAX = MEPClient.TX_AMPLITUDE_BINS_MAX
 
-# ===== LAYOUT CONSTANTS ===== #
+# Layout and buffer limits
 LEFT_PANEL_WIDTH = 450
 ADV_PANEL_WIDTH = 510
 DEFAULT_WIN_HEIGHT = 750
@@ -52,13 +63,16 @@ MQTT_LOG_BUFFER_MAX_MESSAGES = 500
 MQTT_LOG_WIDGET_MAX_LINES = 10000
 APP_LOG_WIDGET_MAX_LINES = 5000
 APP_LOG_PENDING_MAX_MESSAGES = 1000
+
 # Max SPEC frames queued between render ticks. Bounds the MQTT->Tk handoff and
 # never exceeds a screen of catch-up (waterfall height), so it drops only the
 # oldest frames under sustained overrun, never silently coalesces fresh ones.
 SPEC_PENDING_MAX_ROWS = 256
 
 
-# ===== TEXT LOGGING HANDLER ===== #
+# ============================= #
+#      TEXT LOGGING HANDLER     #
+# ============================= #
 
 class _TextHandler(logging.Handler):
     """Logging handler that appends records to a ScrolledText widget."""
@@ -122,7 +136,9 @@ class _TextHandler(logging.Handler):
         super().close()
 
 
-# ===== SPECTRUM HELPERS ===== #
+# ============================= #
+#        SPECTRUM HELPERS       #
+# ============================= #
 
 def _spec_resample_1d(arr: np.ndarray, n_out: int) -> np.ndarray:
     """Linearly resample a 1-D float32 array to n_out samples."""
@@ -149,11 +165,14 @@ class SpectrumViewport:
     def __init__(self, width: int = 1, height: int = 1):
         self._w = max(1, width)
         self._h = max(1, height)
+
         # Ring: _head is next write position. Newest row: (_head-1) % _h.
         self._values = np.full((self._h, self._w), np.nan, dtype=np.float32)
         self._meta: list = [None] * self._h
         self._head = 0
-        self._count = 0  # valid rows: 0..height
+
+        # valid rows: 0..height
+        self._count = 0
 
     @property
     def width(self) -> int:
@@ -225,6 +244,7 @@ class SpectrumViewport:
         h = max(1, height)
         if w == self._w and h == self._h:
             return
+
         # Snapshot existing rows newest-first; keep only as many as fit
         n_keep = min(self._count, h)
         saved_rows = []
@@ -239,6 +259,7 @@ class SpectrumViewport:
         self._meta = [None] * h
         self._head = 0
         self._count = 0
+
         # Re-insert oldest-first, resampled to new width
         for vals, meta in zip(reversed(saved_rows), reversed(saved_meta)):
             self._values[self._head] = _spec_resample_1d(vals, w)
@@ -247,7 +268,9 @@ class SpectrumViewport:
             self._count += 1
 
 
-# ===== MAIN GUI CLASS ===== #
+# ============================= #
+#         MAIN GUI CLASS        #
+# ============================= #
 
 class MEPGui:
 
@@ -267,7 +290,7 @@ class MEPGui:
         self._afe_time_source_signature = None
         self._tlm_latest_gps = {}
         self._tlm_latest_gpsd = {}
-        
+
         # MQTT streaming
         self._mqtt_buffer_max_messages = MQTT_LOG_BUFFER_MAX_MESSAGES
         self._mqtt_widget_max_lines = MQTT_LOG_WIDGET_MAX_LINES
@@ -277,42 +300,67 @@ class MEPGui:
         self._mqtt_paused = False
         self._gui_queue = queue.SimpleQueue()
         self._gui_queue_closed = False
-        
+
         # DockerManager client is constructed after the shared MQTT bus.
         self.docker = None
         self._docker_suppress_tree_stream = False
         self._service_journal_user_paused = False
-        
+
         # RFSoC monitoring
         self._monitor_rfsoc_tlm = None
         self._monitor_rfsoc_log_key = None
         self._monitor_rfsoc_tlm_lock = threading.Lock()
         self._monitor_rfsoc_tlm_event = threading.Event()
-        
+
         # SPEC tab state
         self._spec_lock = threading.Lock()
+
         # _spec_lock guards _spec_pending only (MQTT-to-Tk handoff).
         # All other spec state is Tk-thread-only.
-        self._spec_topic = ""             # populated from the client after construction
-        self._spec_stream_requested = True    # SPEC streams by default at startup
-        self._spec_tab_visible = False        # SPEC tab is currently showing
-        self._spec_is_active = False          # derived: stream_requested AND tab_visible
-        self._spec_pending = deque(maxlen=SPEC_PENDING_MAX_ROWS)  # bounded MQTT->Tk frame queue
-        self._spec_latest_entry = None        # newest entry for line-plot native resolution
-        self._spec_viewport = SpectrumViewport()   # screen-resolution ring (Tk thread only)
-        self._spec_bins = None               # line-plot resolution override (None = native)
-        self._spec_render_interval_ms = 40   # render cadence (~25 FPS)
+        # populated from the client after construction
+        self._spec_topic = ""
+
+        # SPEC streams by default at startup
+        self._spec_stream_requested = True
+
+        # SPEC tab is currently showing
+        self._spec_tab_visible = False
+
+        # derived: stream_requested AND tab_visible
+        self._spec_is_active = False
+
+        # bounded MQTT->Tk frame queue
+        self._spec_pending = deque(maxlen=SPEC_PENDING_MAX_ROWS)
+
+        # newest entry for line-plot native resolution
+        self._spec_latest_entry = None
+
+        # screen-resolution ring (Tk thread only)
+        self._spec_viewport = SpectrumViewport()
+
+        # line-plot resolution override (None = native)
+        self._spec_bins = None
+
+        # render cadence (~25 FPS)
+        self._spec_render_interval_ms = 40
         self._spec_render_after_id = None
         self._spec_force_render = False
         self._spec_last_arrival = None
         self._spec_log_dt = False
         self._spec_color_lut = self._spec_build_color_lut()
+
         # Waterfall image (Tk thread only)
-        self._spec_pixels = None             # (h, w, 3) uint8 pixel buffer
-        self._spec_photo = None              # one persistent ImageTk.PhotoImage
-        self._spec_wf_image_id = None        # canvas item id for the waterfall image
+        # (h, w, 3) uint8 pixel buffer
+        self._spec_pixels = None
+
+        # one persistent ImageTk.PhotoImage
+        self._spec_photo = None
+
+        # canvas item id for the waterfall image
+        self._spec_wf_image_id = None
         self._spec_wf_resize_after_id = None
         self._spec_wf_target_size = None
+
         # Persistent canvas items (created once, updated via coords/itemconfig)
         self._spec_line_item = None
         self._spec_line_labels = {}
@@ -405,9 +453,11 @@ class MEPGui:
         self._rec_presets_loaded = False
         self._vars["time_source"] = tk.StringVar(value="")
         self._vars["epoch_mode"] = tk.StringVar(value="")
+
         # Blank/0 until the service reports the real value — never guess.
         self._vars["poll_interval_s"] = tk.IntVar(value=0)
         self._vars["log_enabled"] = tk.StringVar(value="enabled")
+
         # Blank/0 until afecontrol/announce reports the real state - never guess.
         self._vars["log_path"] = tk.StringVar(value="")
         self._vars["log_rate"] = tk.DoubleVar(value=0.0)
@@ -426,18 +476,18 @@ class MEPGui:
             )
             label.pack()
             widget._tooltip = tooltip
-        
+
         def on_leave(event):
             if hasattr(widget, '_tooltip'):
                 widget._tooltip.destroy()
                 del widget._tooltip
-        
+
         widget.bind("<Enter>", on_enter)
         widget.bind("<Leave>", on_leave)
 
-    # ------------------------------------------------------------------ #
-    #  MQTT listener callbacks (called from MQTT thread → schedule to GUI)
-    # ------------------------------------------------------------------ #
+    # ===================================================================== #
+    #  MQTT LISTENER CALLBACKS (CALLED FROM MQTT THREAD → SCHEDULE TO GUI)  #
+    # ===================================================================== #
 
     def _on_mqtt_message(self, topic: str, payload: bytes):
         """Global listener: log every MQTT message in the MQTT tab.
@@ -673,6 +723,7 @@ class MEPGui:
             return
         except Exception:
             logging.exception("GUI dispatch callback failed")
+
         # Reschedule immediately to drain remaining items, but yield so Tk
         # can process expose/configure events between each callback.
         try:
@@ -680,9 +731,9 @@ class MEPGui:
         except tk.TclError:
             self._gui_queue_closed = True
 
-    # ------------------------------------------------------------------ #
-    #  TLM tab updaters (run on GUI thread)
-    # ------------------------------------------------------------------ #
+    # ====================================== #
+    #  TLM TAB UPDATERS (RUN ON GUI THREAD)  #
+    # ====================================== #
 
     def _set_var(self, key: str, val):
         if key in self._vars:
@@ -784,8 +835,6 @@ class MEPGui:
         self.mep.afe.set_attenuation(device, value, session_id=session_id)
         self._afe_update_atten_ui_state(device, confirmed=confirmed)
         self.root.after(150, self._afe_refresh)
-
-
 
     def _tlm_gps_update(self, data: dict):
         lat = data.get("lat", data.get("latitude", "—"))
@@ -905,9 +954,9 @@ class MEPGui:
         for key in keys:
             self._set_var(f"tlm_hk_{key}", data.get(key, "—"))
 
-    # ------------------------------------------------------------------ #
-    #  UI Construction
-    # ------------------------------------------------------------------ #
+    # ============================= #
+    #        UI CONSTRUCTION        #
+    # ============================= #
 
     def _build_ui(self):
         self.root.columnconfigure(0, weight=0)
@@ -1507,6 +1556,7 @@ class MEPGui:
         frame = self._tab_frames[tab_text]
         builder(frame)
         self._tabs_built.add(tab_text)
+
         # afecontrol/announce is retained and already fired before this tab existed, so replay
         # it now to populate widgets the builder just created (epoch, time source, ...).
         cached = self.mep.afe.get_announce()
@@ -1543,6 +1593,7 @@ class MEPGui:
         self._ensure_tab_built(tab_text)
         if tab_text == "REC" and tab_was_built:
             self._rec_request_presets()
+
         # Keep SPEC subscription active only when the tab is actually showing
         new_spec_visible = (tab_text == "SPEC")
         if new_spec_visible != self._spec_tab_visible:
@@ -2147,7 +2198,9 @@ class MEPGui:
     def _build_mqtt_tab(self, frame: ttk.Frame):
         """MQTT tab: live log of all incoming MQTT messages + manual publish."""
         frame.columnconfigure(0, weight=1)
-        frame.rowconfigure(1, weight=1)   # log row expands
+
+        # log row expands
+        frame.rowconfigure(1, weight=1)
 
         # Initialize MQTT stream state
         self._mqtt_paused = False
@@ -2417,10 +2470,13 @@ class MEPGui:
         h = max(4, h)
         if self._spec_pixels is not None and self._spec_pixels.shape[:2] == (h, w):
             return
+
         # Resize viewport (resamples existing rows to new width, trims to new height)
         self._spec_viewport.resize(w, h)
+
         # Allocate new pixel buffer
         self._spec_pixels = np.zeros((h, w, 3), dtype=np.uint8)
+
         # Allocate new PhotoImage, release old one after Tk has the new reference
         pil = _PILImage.fromarray(self._spec_pixels, "RGB")
         new_photo = _PILImageTk.PhotoImage(image=pil)
@@ -2434,6 +2490,7 @@ class MEPGui:
         self._spec_photo = new_photo
         if old_photo is not None:
             del old_photo
+
         # Repaint from viewport if any data is present
         vmin, vmax = self._spec_color_range()
         if vmin is not None and self._spec_viewport.valid_rows > 0:
@@ -2467,6 +2524,7 @@ class MEPGui:
             return
         self._spec_topic = self.mep.spectrum.topic
         self._spec_stream_requested = True
+
         # Reset for a fresh stream start (user-initiated only)
         self._spec_viewport.clear()
         with self._spec_lock:
@@ -2535,6 +2593,7 @@ class MEPGui:
         self._vars["spec_bins"].set("native" if n is None else str(n))
         self._spec_bins = n
         self._spec_update_bin_button_states()
+
         # Line resample controls only the line-plot resolution; the waterfall renders
         # at native resolution, so no buffer reset is needed — just redraw.
         self._spec_request_render()
@@ -2588,12 +2647,15 @@ class MEPGui:
             # Every visible row is new — rebuild from the viewport at one scale.
             self._spec_repaint_all(vmin, vmax)
             return
+
         # Shift existing rows down by ``count``. NumPy buffers the overlapping
         # slice assignment, so the down-shift is correct.
         self._spec_pixels[count:] = self._spec_pixels[:-count]
+
         # Paint the ``count`` newest rows at the top (pixel row i = offset i).
         for i in range(count):
-            row_vals, _ = self._spec_viewport.row_at_offset(i)  # 0 = newest
+            # 0 = newest
+            row_vals, _ = self._spec_viewport.row_at_offset(i)
             if row_vals is not None:
                 self._spec_pixels[i] = self._spec_row_to_rgb(row_vals, w, vmin, vmax)
         pil = _PILImage.fromarray(self._spec_pixels, "RGB")
@@ -2611,7 +2673,8 @@ class MEPGui:
         self._spec_pixels[:] = 0
         n = min(self._spec_viewport.valid_rows, h)
         for i in range(n):
-            row_vals, _ = self._spec_viewport.row_at_offset(i)  # 0=newest=top
+            # 0=newest=top
+            row_vals, _ = self._spec_viewport.row_at_offset(i)
             if row_vals is not None:
                 self._spec_pixels[i] = self._spec_row_to_rgb(row_vals, w, vmin, vmax)
         pil = _PILImage.fromarray(self._spec_pixels, "RGB")
@@ -2651,6 +2714,7 @@ class MEPGui:
                 if "spec_cursor" in self._vars:
                     self._vars["spec_cursor"].set("Cursor: no data at this row")
                 return
+
             # Viewport offset 0 = newest = pixel row 0 (top of waterfall)
             row_vals, meta = self._spec_viewport.row_at_offset(y)
             if row_vals is None or meta is None:
@@ -3004,6 +3068,7 @@ class MEPGui:
             return
         if not self._is_adv_tab_selected("BUS"):
             return
+
         # Do not log if stream is paused
         if self._mqtt_paused:
             return
@@ -4127,6 +4192,7 @@ class MEPGui:
             text="remember to 'set' desired changes before pressing 'start'",
             foreground="grey", font=("TkDefaultFont", 8),
         ).grid(row=5, column=0, columnspan=3, sticky="w", padx=5, pady=(0, 4))
+
         # ── UDP Stream ────────────────────────────────────────────────────
         # Controls whether the FPGA ADC-to-UDP IP cores are streaming packets.
         udp_f = ttk.LabelFrame(frame, text="UDP Stream")
@@ -4443,7 +4509,7 @@ class MEPGui:
         gps_f = ttk.LabelFrame(frame, text="GPS")
         gps_f.grid(row=0, column=0, padx=4, pady=(4, 2), sticky="ew")
         gps_f.columnconfigure(1, weight=1)
-        
+
         # Left: Display
         left_f = ttk.Frame(gps_f)
         left_f.grid(row=0, column=0, sticky="n", padx=(5, 10), pady=4)
@@ -4456,18 +4522,19 @@ class MEPGui:
         _ro_value(left_f, 2, 1, "tlm_gps_latlon", width=18)
         ttk.Label(left_f, text="Speed (kt)").grid(row=3, column=0, sticky="w", padx=2, pady=1)
         _ro_value(left_f, 3, 1, "tlm_gps_speed", width=18)
-        
+
         # Right: Time controls (GPS has no rate command — display only)
         right_f = ttk.Frame(gps_f)
         right_f.grid(row=0, column=1, sticky="n", padx=(10, 5), pady=4)
         right_f.columnconfigure(1, weight=1)
-        
+
         ttk.Label(right_f, text="Time Source", font=("TkDefaultFont", 9, "bold")).grid(
             row=0, column=0, columnspan=2, sticky="w", pady=(0, 2))
         self._time_source_frame = ttk.Frame(right_f)
         self._time_source_frame.grid(row=1, column=0, columnspan=2, sticky="w")
+
         # Radio buttons created dynamically by _apply_afe_announce
-        
+
         ttk.Label(right_f, text="Epoch", font=("TkDefaultFont", 9, "bold")).grid(
             row=2, column=0, columnspan=2, sticky="w", pady=(4, 2))
         self._epoch_combo = ttk.Combobox(right_f, textvariable=self._vars["epoch_mode"],
@@ -5021,7 +5088,9 @@ class MEPGui:
 
         row = 0
 
-        # ===== SUMMARY =====
+        # ============================= #
+        #            SUMMARY            #
+        # ============================= #
         status_frame = ttk.LabelFrame(scrollable_frame, text="Recorder Summary")
         status_frame.grid(row=row, column=0, padx=4, pady=(4, 2), sticky="ew")
         status_frame.columnconfigure(1, weight=1)
@@ -5067,7 +5136,9 @@ class MEPGui:
             wraplength=455,
         ).grid(row=3, column=0, columnspan=3, sticky="w", padx=5, pady=(0, 5))
 
-        # ===== DIGITAL RF IQ =====
+        # ============================= #
+        #         DIGITAL RF IQ         #
+        # ============================= #
         drf_frame = ttk.LabelFrame(scrollable_frame, text="DigitalRF IQ")
         drf_frame.grid(row=row, column=0, padx=4, pady=6, sticky="ew")
         drf_frame.columnconfigure(1, weight=1)
@@ -5123,7 +5194,9 @@ class MEPGui:
             width=14,
         ).grid(row=4, column=1, sticky="w", padx=5, pady=4)
 
-        # ===== THROUGHPUT CONTROLS =====
+        # ============================= #
+        #      THROUGHPUT CONTROLS      #
+        # ============================= #
         throughput_frame = ttk.LabelFrame(scrollable_frame, text="Throughput Controls")
         throughput_frame.grid(row=row, column=0, padx=4, pady=6, sticky="ew")
         row += 1
@@ -5226,7 +5299,9 @@ class MEPGui:
             wraplength=455,
         ).grid(row=throughput_row, column=0, columnspan=2, sticky="w", padx=5, pady=(2, 4))
 
-        # ===== SPECTROGRAMS =====
+        # ============================= #
+        #          SPECTROGRAMS         #
+        # ============================= #
         disp_frame = ttk.LabelFrame(scrollable_frame, text="Spectrograms")
         disp_frame.grid(row=row, column=0, padx=4, pady=6, sticky="ew")
         disp_frame.columnconfigure(2, weight=1)
@@ -5354,7 +5429,9 @@ class MEPGui:
         cb_output.grid(row=0, column=2, sticky="w")
         self._add_tooltip(cb_output, "pipeline.output")
 
-        # ===== YAML-ONLY SETTINGS =====
+        # ============================= #
+        #       YAML-ONLY SETTINGS      #
+        # ============================= #
         yaml_only_frame = ttk.LabelFrame(scrollable_frame, text="Set via YAML only")
         yaml_only_frame.grid(row=row, column=0, padx=4, pady=6, sticky="ew")
         yaml_only_frame.columnconfigure(0, weight=1)
@@ -5381,7 +5458,9 @@ class MEPGui:
             font=("TkDefaultFont", 9),
         ).grid(row=2, column=0, sticky="w", padx=5, pady=(2, 4))
 
-        # ===== NEXT-RECORD ACTIONS =====
+        # ============================= #
+        #      NEXT-RECORD ACTIONS      #
+        # ============================= #
         action_frame = ttk.LabelFrame(scrollable_frame, text="APPLY changes")
         action_frame.grid(row=row, column=0, padx=4, pady=6, sticky="ew")
         for column in range(2):
@@ -5408,6 +5487,7 @@ class MEPGui:
         self._update_conjugate_actual_display()
         self._rec_trace_busy = False
         self._rec_request_presets()
+
         # Populate with cached data so tab shows current state immediately on first open.
         cached = self.mep.recorder.get_status()
         if isinstance(cached, dict):
@@ -5439,9 +5519,9 @@ class MEPGui:
             self._vars["conjugate_policy"].set(CONJUGATE_POLICY_DEFAULT)
         self._vars["conjugate_actual"].set("pending")
 
-    # ------------------------------------------------------------------ #
-    #  AFE helpers
-    # ------------------------------------------------------------------ #
+    # ============================= #
+    #          AFE HELPERS          #
+    # ============================= #
 
     def _afe_refresh(self):
         """Request current register state from AFE via MQTT."""
@@ -5528,6 +5608,7 @@ class MEPGui:
                 reg_default = self._afe_reg_default(reg)
                 if key in self._vars:
                     self._afe_set_control_var_from_raw(key, reg, reg_default)
+
             # Reset attenuation for RX devices
             requested_key = f"afe_{device}_atten_requested"
             if requested_key in self._vars:
@@ -5536,9 +5617,9 @@ class MEPGui:
             self._afe_update_atten_ui_state(device)
         logging.info("AFE: all registers reset to defaults")
 
-    # ------------------------------------------------------------------ #
-    #  TLM helpers
-    # ------------------------------------------------------------------ #
+    # ============================= #
+    #          TLM HELPERS          #
+    # ============================= #
 
     # NOTE: GPS has no rate command — removed _tlm_apply_gnss_rate
 
@@ -5594,9 +5675,9 @@ class MEPGui:
         self.mep.afe.configure_logging(mode == "enabled", path, rate)
         logging.info(f"TLM: logging configuration requested ({mode}, path={path}, rate={rate} s)")
 
-    # ------------------------------------------------------------------ #
-    #  SERVICE helpers
-    # ------------------------------------------------------------------ #
+    # ============================= #
+    #        SERVICE HELPERS        #
+    # ============================= #
 
     def _service_set_action_busy(self, busy: bool):
         state = "disabled" if busy else "normal"
@@ -5999,9 +6080,9 @@ class MEPGui:
         self._service_apply_status({})
         self.root.after(100, self._service_refresh_status_async)
 
-    # ------------------------------------------------------------------ #
-    #  DOCKER helpers
-    # ------------------------------------------------------------------ #
+    # ============================= #
+    #         DOCKER HELPERS        #
+    # ============================= #
 
     def _docker_set_action_busy(self, busy: bool):
         state = "disabled" if busy else "normal"
@@ -6596,20 +6677,17 @@ class MEPGui:
         )
         self.root.after(100, self._docker_refresh_status_async)
 
-
-    # ------------------------------------------------------------------ #
-    #  SOC helpers
-    # ------------------------------------------------------------------ #
+    # ============================= #
+    #          SOC HELPERS          #
+    # ============================= #
 
     def _soc_refresh(self):
-        threading.Thread(
-            target=self.mep.rfsoc.status,
-            daemon=True,
-        ).start()
+        threading.Thread(target=self.mep.rfsoc.status, daemon=True).start()
 
     def _soc_apply(self, tlm: dict):
         if "soc_state" not in self._vars:
-            return  # SOC tab not yet built; skip until user opens it
+            # SOC tab not yet built; skip until user opens it
+            return
         self._vars["soc_state"].set(tlm.get("state", "—"))
         self._vars["soc_state_RX"].set(tlm.get("state_RX", "—"))
         self._vars["soc_state_TX"].set(tlm.get("state_TX", "—"))
@@ -6636,6 +6714,7 @@ class MEPGui:
             for ch in channels
         ]
         self._vars["soc_channels"].set(", ".join(channel_with_ports) if channel_with_ports else "—")
+
         # Manual Control checkboxes are staged user intent and intentionally do
         # not mirror live hardware state; Current Status above is the source of truth.
 
@@ -6679,6 +6758,7 @@ class MEPGui:
     def _soc_apply_pll_config(self, data: dict):
         if not isinstance(data, dict):
             return
+
         # Listener is registered globally, but SOC widgets are lazy-built.
         if not hasattr(self, "_soc_pll_text"):
             return
@@ -6763,13 +6843,14 @@ class MEPGui:
         self.mep.rfsoc.set_channel(channel_str)
         logging.info(f"SOC: set channel {channel_str} sent — restart UDP stream to apply")
 
-    # ------------------------------------------------------------------ #
-    #  TX helpers
-    # ------------------------------------------------------------------ #
+    # ============================= #
+    #           TX HELPERS          #
+    # ============================= #
 
     def _tx_apply(self, tlm: dict):
         if "tx_st_transmitting" not in self._vars:
-            return  # TX tab not yet built
+            # TX tab not yet built
+            return
         if not isinstance(tlm, dict):
             # Never leave a stale transmit claim on screen when the payload is unusable.
             self._vars["tx_st_transmitting"].set("Unknown")
@@ -6839,13 +6920,14 @@ class MEPGui:
         elif "tx_st_transmitting" in self._vars:
             self._vars["tx_st_transmitting"].set(f"Failed: {error}")
 
-    # ------------------------------------------------------------------ #
-    #  TUN helpers
-    # ------------------------------------------------------------------ #
+    # ============================= #
+    #          TUN HELPERS          #
+    # ============================= #
 
     def _tun_refresh(self):
         if "tun_state" not in self._vars:
-            return  # TUN tab not yet built
+            # TUN tab not yet built
+            return
         status = self.mep.tuner.get_status()
 
         if not status:
@@ -6912,7 +6994,8 @@ class MEPGui:
 
     def _tun_handle_response(self, data: dict):
         if "tun_set_freq" not in self._vars:
-            return  # TUN tab not yet built
+            # TUN tab not yet built
+            return
         task = data.get("task_name", "")
         value = data.get("value")
         if value is None:
@@ -6994,9 +7077,9 @@ class MEPGui:
                 except Exception:
                     pass
 
-    # ------------------------------------------------------------------ #
-    #  REC helpers
-    # ------------------------------------------------------------------ #
+    # ============================= #
+    #          REC HELPERS          #
+    # ============================= #
 
     def _on_rec_sample_rate_change(self, *_):
         if "rec_config_source" not in self._vars or getattr(self, "_rec_trace_busy", False):
@@ -7118,9 +7201,7 @@ class MEPGui:
 
         metrics = model["metrics"]
         self._vars["calc_freq_formula"].set(
-            "{frequency_bins:,} bins | {frequency_resolution_hz:,.3f} Hz/bin".format(
-                **metrics
-            )
+            "{frequency_bins:,} bins | {frequency_resolution_hz:,.3f} Hz/bin".format(**metrics)
         )
         self._vars["calc_hop_formula"].set(
             "{fft_hop_samples:,} samples | {hop_us:,.3f} us".format(
@@ -7309,12 +7390,13 @@ class MEPGui:
     def _rec_status_ui_update(self, data: dict):
         """Update REC tab widgets from recorder status (only called after tab is built)."""
         if "rec_status" not in self._vars:
-            return  # REC tab not yet built
+            # REC tab not yet built
+            return
         self._vars["rec_status"].set(data.get("state", "—"))
 
-    # ------------------------------------------------------------------ #
-    #  Tuner trace
-    # ------------------------------------------------------------------ #
+    # ============================= #
+    #          TUNER TRACE          #
+    # ============================= #
 
     def _on_tuner_change(self, *_):
         tuner_enabled = self._vars["tuner_selection"].get() != "Disabled"
@@ -7360,14 +7442,15 @@ class MEPGui:
             self._ensure_tab_built(self._get_current_tab_text())
             self._adv_frame.grid()
             self._adv_btn_text.set("Hide Advanced Options \u25c0")
+
         # Tk freezes the toplevel at its last actual size once mapped/resized;
         # releasing the geometry lets it recompute to fit current content.
         self.root.update_idletasks()
         self.root.geometry("")
 
-    # ------------------------------------------------------------------ #
-    #  Logging
-    # ------------------------------------------------------------------ #
+    # ============================= #
+    #            LOGGING            #
+    # ============================= #
 
     def _setup_logging(self):
         handler = _TextHandler(self._log_text)
@@ -7375,6 +7458,7 @@ class MEPGui:
             logging.Formatter("%(asctime)s %(levelname)-7s %(message)s",
                               datefmt="%H:%M:%S")
         )
+
         # Root logger stays permissive (DEBUG) so records of every level reach the
         # handlers; the GUI panel's own threshold is what the user controls via the
         # Log "Level" combo. This keeps verbosity a presentation-layer decision.
@@ -7403,9 +7487,9 @@ class MEPGui:
         except tk.TclError:
             pass
 
-    # ------------------------------------------------------------------ #
-    #  Parameter parsing
-    # ------------------------------------------------------------------ #
+    # ============================= #
+    #       PARAMETER PARSING       #
+    # ============================= #
 
     def _parse_tuner_params(self) -> tuple:
         """Return (enabled, adc_if_mhz, injection) from the shared tuner controls."""
@@ -7474,9 +7558,9 @@ class MEPGui:
             "injection":        injection,
         }
 
-    # ------------------------------------------------------------------ #
-    #  Button handlers
-    # ------------------------------------------------------------------ #
+    # ============================= #
+    #        BUTTON HANDLERS        #
+    # ============================= #
 
     def _orchestrator_rx_settings(self, params: dict, *, sweep: bool) -> dict:
         tuner_enabled = params["tuner_enabled"]
@@ -7507,9 +7591,9 @@ class MEPGui:
         }
         return settings
 
-    # ------------------------------------------------------------------ #
-    #  Button handlers
-    # ------------------------------------------------------------------ #
+    # ============================= #
+    #        BUTTON HANDLERS        #
+    # ============================= #
 
     def _set_rx_sweep_enabled(self, enabled: bool):
         self._vars["end_enabled"].set(enabled)
@@ -7575,9 +7659,9 @@ class MEPGui:
             callback=lambda response: self._gui_call(self._handle_workflow_response, "RX", response)
         )
 
-    # ------------------------------------------------------------------ #
-    #  Housekeeping polling (Jetson health only)
-    # ------------------------------------------------------------------ #
+    # =========================================== #
+    #  HOUSEKEEPING POLLING (JETSON HEALTH ONLY)  #
+    # =========================================== #
 
     def _schedule_housekeeping(self):
         pass
@@ -7586,7 +7670,9 @@ class MEPGui:
         pass
 
 
-# ===== ENTRY POINT ===== #
+# ============================= #
+#          ENTRY POINT          #
+# ============================= #
 
 def main():
     parser = argparse.ArgumentParser(description="MEP Control GUI")

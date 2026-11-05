@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """HostManager service exposed through MQTT."""
 
+# ============================= #
+#            IMPORTS            #
+# ============================= #
+
 import json
 import logging
 import os
@@ -16,19 +20,39 @@ from typing import Any, Optional
 
 import paho.mqtt.client as mqtt
 
+
+# ============================= #
+#         CONFIGURATION         #
+# ============================= #
+
+# Service identity and broker
 SERVICE_NAME = "hostmanager"
 MQTT_BROKER = "localhost"
 MQTT_PORT = 1883
-STATUS_TOPIC = f"{SERVICE_NAME}/status"
+
+# Timing
+STATUS_INTERVAL_S = 1.0
+
+# MQTT topics
+ANNOUNCE_TOPIC = f"{SERVICE_NAME}/announce"
 COMMAND_TOPIC = f"{SERVICE_NAME}/command"
 RESPONSE_TOPIC = f"{SERVICE_NAME}/response"
-ANNOUNCE_TOPIC = f"{SERVICE_NAME}/announce"
+STATUS_TOPIC = f"{SERVICE_NAME}/status"
+DATA_TOPIC = f"{SERVICE_NAME}/data"
 EVENT_TOPIC = f"{SERVICE_NAME}/event"
-STATUS_INTERVAL_S = 1.0
+LOG_TOPIC = f"{SERVICE_NAME}/logs"
+
+# Service-specific settings
 NVP_MODEL_CONFIG_PATH = "/etc/nvpmodel.conf"
 DEFAULT_FILESYSTEM_PATHS = ("/",)
 
 DEFAULT_PATH = "/"
+
+
+# ============================= #
+#      COMMAND DESCRIPTIONS     #
+# ============================= #
+
 COMMAND_DESCRIPTIONS = {
     "get_status": {
         "description": "Return the current host platform state.",
@@ -58,6 +82,10 @@ COMMAND_DESCRIPTIONS = {
     },
 }
 
+
+# ============================= #
+#          HOST METRICS         #
+# ============================= #
 
 class HostManager:
     """Read host metrics without MQTT or application-specific behavior."""
@@ -440,6 +468,10 @@ class HostManager:
         }
 
 
+# ============================= #
+#          MQTT SERVICE         #
+# ============================= #
+
 class HostManagerService:
     """MQTT adapter and polling loop for HostManager."""
 
@@ -627,6 +659,10 @@ class HostManagerService:
             self.client.loop_stop()
             self.client.disconnect()
 
+
+# ============================= #
+#       SERVICE LIFECYCLE       #
+# ============================= #
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")

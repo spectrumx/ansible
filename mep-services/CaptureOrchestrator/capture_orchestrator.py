@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """MQTT service for coordinated RX and TX acquisition workflows."""
 
+# ============================= #
+#            IMPORTS            #
+# ============================= #
+
 import csv
 import json
 import logging
@@ -18,19 +22,30 @@ from typing import Optional
 import paho.mqtt.client as mqtt
 import yaml
 
+
+# ============================= #
+#         CONFIGURATION         #
+# ============================= #
+
+# Service identity and broker
 SERVICE_NAME = "captureorchestrator"
 MQTT_BROKER = "localhost"
 MQTT_PORT = 1883
+
+# Timing
 STATUS_INTERVAL_S = 1.0
 STATUS_WAIT_S = 3.0
 
+# MQTT topics
 ANNOUNCE_TOPIC = f"{SERVICE_NAME}/announce"
 COMMAND_TOPIC = f"{SERVICE_NAME}/command"
 RESPONSE_TOPIC = f"{SERVICE_NAME}/response"
 STATUS_TOPIC = f"{SERVICE_NAME}/status"
 DATA_TOPIC = f"{SERVICE_NAME}/data"
 EVENT_TOPIC = f"{SERVICE_NAME}/event"
+LOG_TOPIC = f"{SERVICE_NAME}/logs"
 
+# Service-specific settings
 RFSOC_COMMAND = "rfsoc/command"
 RFSOC_STATUS = "rfsoc/status"
 TUNER_COMMAND = "tunercontrol/command"
@@ -55,7 +70,16 @@ CAPTURES_ROOT_DIR = Path("/data/captures")
 PREVIEW_DATA_DIR = CAPTURES_ROOT_DIR / "preview" / "data"
 CAPTURE_SETTINGS_FILENAME = "capture_settings.json"
 
-COMMANDS = {
+CONFIG_TYPE = "mep_capture_settings"
+CONFIG_VERSION = 1
+LEGACY_CONFIG_TYPE = "capture_orchestrator_config"
+
+
+# ============================= #
+#      COMMAND DESCRIPTIONS     #
+# ============================= #
+
+COMMAND_DESCRIPTIONS = {
     "get_status": {"description": "Return current acquisition workflow state.", "arguments": {}},
     "get_config": {"description": "Return the staged workflow configuration.", "arguments": {}},
     "load_config": {"description": "Load a capture settings document from JSON or YAML.", "arguments": {"path": {"type": "string", "required": True}}},
@@ -107,10 +131,10 @@ COMMANDS = {
     "abort": {"description": "Stop active RX and TX workflows.", "arguments": {}},
 }
 
-CONFIG_TYPE = "mep_capture_settings"
-CONFIG_VERSION = 1
-LEGACY_CONFIG_TYPE = "capture_orchestrator_config"
 
+# ============================= #
+#       RECORDER SETTINGS       #
+# ============================= #
 
 def discover_sample_rate_options(recorder_config_dir: str = RECORDER_CONFIG_DIR) -> list[str]:
     """Discover sample rates from deployed sr{N}MHz.yaml recorder presets."""
@@ -418,6 +442,10 @@ def preview_recorder_settings(
     return model
 
 
+# ============================= #
+#     WORKFLOW CONFIGURATION    #
+# ============================= #
+
 class ConfigManager:
     """Manage reusable workflow configuration and per-request overrides."""
 
@@ -669,6 +697,10 @@ class ConfigManager:
         return translated, legacy_tuner
 
 
+# ============================= #
+#   MQTT TRANSPORT AND STATUS   #
+# ============================= #
+
 class MqttClient:
     """Transport for direct commands to owning services."""
 
@@ -708,6 +740,11 @@ class StatusTracker:
     def latest(self, topic: str):
         with self._lock:
             return self._values.get(topic)
+
+
+# ============================= #
+#       CAPTURE TELEMETRY       #
+# ============================= #
 
 class CaptureTelemetryLogger:
     """Write capture-scoped AFE telemetry while an RX capture is active."""
@@ -856,6 +893,10 @@ class CaptureTelemetryLogger:
             return self._TOPICS if self._active else ()
 
 
+# ============================= #
+#         WORKFLOW STATE        #
+# ============================= #
+
 class WorkflowState:
     def __init__(self):
         self._lock = threading.Lock()
@@ -879,6 +920,10 @@ class WorkflowState:
         with self._lock:
             return dict(self._value)
 
+
+# ============================= #
+#       RECORDER COMMANDS       #
+# ============================= #
 
 class Recorder:
     """Configure and control RecorderControl as one workflow component."""
@@ -926,6 +971,10 @@ class Recorder:
         self.mqtt.command(RECORDER_COMMAND, "disable", session_id=session_id)
         self.mqtt.command(RECORDER_COMMAND, "status", session_id=session_id)
 
+
+# ============================= #
+#          RX WORKFLOWS         #
+# ============================= #
 
 class Rx:
     """Receive-path recipes."""
@@ -1032,6 +1081,7 @@ class Rx:
     def _configure_rx_frequency(self, frequency_hz, settings, session_id):
         use_external_tuner = settings.get("external_tuner_enabled", False)
         injection = settings.get("injection")
+
         # Reset RFSoC before changing channel or frequency.
         self.mqtt.command(RFSOC_COMMAND, "reset", session_id=session_id)
 
@@ -1042,6 +1092,7 @@ class Rx:
             if settings.get("adc_if_mhz") is None or injection not in {"high", "low"}:
                 raise ValueError("external tuner requires adc_if_mhz and injection")
             if_mhz = float(settings["adc_if_mhz"])
+
             # Set the RFSoC IF for the external-tuner path.
             self.mqtt.command(RFSOC_COMMAND, "set", f"freq_IF {if_mhz}", session_id)
 
@@ -1115,6 +1166,10 @@ class Rx:
             raise ValueError("injection must be high or low")
 
 
+# ============================= #
+#          TX WORKFLOWS         #
+# ============================= #
+
 class Tx:
     """Transmit-path recipes."""
 
@@ -1167,6 +1222,10 @@ class Tx:
         self.state.set(state="idle", operation=None, signal_path=None, error=None)
         return {"state": "idle"}
 
+
+# ============================= #
+#   ACQUISITION ORCHESTRATION   #
+# ============================= #
 
 class CaptureOrchestrator:
     """Selects and runs RX/TX recipes."""
@@ -1323,6 +1382,10 @@ class CaptureOrchestrator:
         }
 
 
+# ============================= #
+#          MQTT SERVICE         #
+# ============================= #
+
 class CaptureOrchestratorService:
     def __init__(self, broker=MQTT_BROKER, port=MQTT_PORT):
         self.client = mqtt.Client(
@@ -1423,7 +1486,7 @@ class CaptureOrchestratorService:
                 "data": DATA_TOPIC,
                 "event": EVENT_TOPIC,
             },
-            "commands": COMMANDS,
+            "commands": COMMAND_DESCRIPTIONS,
         }
 
     def publish_status(self):
@@ -1456,6 +1519,10 @@ class CaptureOrchestratorService:
             self.client.loop_stop()
             self.client.disconnect()
 
+
+# ============================= #
+#       SERVICE LIFECYCLE       #
+# ============================= #
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
