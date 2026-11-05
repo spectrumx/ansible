@@ -82,8 +82,11 @@ payload contains `mac_address`, `short_name`, `broker_name`, and a `sensors` arr
 identity used for compatibility, not an independently measured hardware serial.
 Existing HostManager values supply hostname, kernel release, hardware platform,
 CPU/memory percentages, and disk used/free. Disk values are converted from bytes
-to GiB rounded to one decimal, matching Icarus. Unavailable values are not
-fabricated. Host fields are cleared to null on local disconnection until updated.
+to GiB rounded to one decimal, matching Icarus. The website's `system_version`
+field contains the reported system name and kernel release, such as
+`Linux 5.15.148-tegra`; it does not claim a distribution version. Unavailable
+values are not fabricated. Host fields are cleared to null on local
+disconnection until updated.
 
 | Capability | Public client source |
 |---|---|

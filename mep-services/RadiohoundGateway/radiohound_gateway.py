@@ -117,6 +117,7 @@ def host_fields(payload):
     fields = {}
     for section, key, target in (
         ("identity", "hostname", "hostname"),
+        ("identity", "system", "system_version"),
         ("identity", "release", "kernelVersion"),
         ("cpu", "used_percent", "cpu_percent_used"),
         ("memory", "used_percent", "memory_percent_used"),
@@ -125,6 +126,12 @@ def host_fields(payload):
         values = payload.get(section)
         if isinstance(values, dict) and key in values:
             fields[target] = status_value(values[key])
+
+    # The website's OS field uses system_version; keep kernelVersion separately.
+    system = fields.get("system_version")
+    kernel = fields.get("kernelVersion")
+    if isinstance(system, str) and system and isinstance(kernel, str) and kernel:
+        fields["system_version"] = status_value(f"{system} {kernel}")
 
     # Icarus displayed disk usage in GiB, rounded to one decimal.
     disk = payload.get("disk")
