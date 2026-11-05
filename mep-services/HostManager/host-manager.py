@@ -5,6 +5,7 @@
 #            IMPORTS            #
 # ============================= #
 
+import ipaddress
 import json
 import logging
 import os
@@ -231,6 +232,42 @@ class HostManager:
         return filesystems
 
     def get_network(self) -> dict:
+        # Read assigned addresses without changing interfaces or querying DNS.
+        addresses = {}
+        address_error = None
+        try:
+            result = subprocess.run(
+                ["ip", "-json", "address", "show"],
+                capture_output=True, text=True, timeout=1, check=True,
+            )
+            records = json.loads(result.stdout)
+            if not isinstance(records, list):
+                raise ValueError("Expected an interface list from ip address")
+            for record in records:
+                if not isinstance(record, dict) or not isinstance(record.get("ifname"), str):
+                    continue
+                entries = record.get("addr_info", [])
+                if not isinstance(entries, list):
+                    continue
+                assigned = []
+                for entry in entries:
+                    if not isinstance(entry, dict) or entry.get("family") not in ("inet", "inet6"):
+                        continue
+                    try:
+                        interface = ipaddress.ip_interface(f"{entry['local']}/{entry['prefixlen']}")
+                    except (KeyError, ValueError):
+                        continue
+                    assigned.append({
+                        "family": "ipv4" if interface.version == 4 else "ipv6",
+                        "address": str(interface.ip),
+                        "prefix_length": interface.network.prefixlen,
+                        "scope": entry.get("scope"),
+                    })
+                addresses[record["ifname"]] = assigned
+        except (OSError, subprocess.SubprocessError, ValueError) as error:
+            # Preserve the existing link/counter status if address collection fails.
+            address_error = str(error)
+
         interfaces = []
         try:
             names = sorted(os.listdir("/sys/class/net"))
@@ -238,7 +275,7 @@ class HostManager:
             names = []
         for name in names:
             base = os.path.join("/sys/class/net", name)
-            item = {"name": name}
+            item = {"name": name, "addresses": addresses.get(name, [])}
             for key, filename in (("mac", "address"), ("state", "operstate"), ("mtu", "mtu"), ("speed_mbps", "speed")):
                 try:
                     value = open(os.path.join(base, filename), "r", encoding="utf-8").read().strip()
@@ -267,7 +304,10 @@ class HostManager:
                         break
         except (OSError, ValueError):
             pass
-        return {"default_interface": default_interface, "interfaces": interfaces}
+        network = {"default_interface": default_interface, "interfaces": interfaces}
+        if address_error is not None:
+            network["address_error"] = address_error
+        return network
 
     def get_gpu(self) -> dict:
         path = "/sys/devices/platform/gpu.0/load"

@@ -5,6 +5,7 @@
 #            IMPORTS            #
 # ============================= #
 
+import ipaddress
 import json
 import logging
 import math
@@ -133,6 +134,33 @@ def host_fields(payload):
     kernel = fields.get("kernelVersion")
     if isinstance(system, str) and system and isinstance(kernel, str) and kernel:
         fields["system_version"] = status_value(f"{system} {kernel}")
+
+    # RadioHound accepts space-separated assigned addresses in IP_addr.
+    # Prefer the default interface and omit loopback/link-local addresses.
+    network = payload.get("network")
+    if isinstance(network, dict):
+        interfaces = network.get("interfaces", [])
+        if isinstance(interfaces, list):
+            interfaces = [item for item in interfaces if isinstance(item, dict)]
+            interfaces.sort(key=lambda item: item.get("name") != network.get("default_interface"))
+            addresses = []
+            for item in interfaces:
+                assigned = item.get("addresses", [])
+                if not isinstance(assigned, list):
+                    continue
+                for entry in assigned:
+                    if not isinstance(entry, dict) or not isinstance(entry.get("address"), str):
+                        continue
+                    try:
+                        address = ipaddress.ip_address(entry["address"])
+                    except ValueError:
+                        continue
+                    if address.is_loopback or address.is_link_local or address.is_unspecified or address.is_multicast:
+                        continue
+                    value = str(address)
+                    if value not in addresses:
+                        addresses.append(value)
+            fields["IP_addr"] = " ".join(addresses[:8]) or None
 
     # Icarus displayed disk usage in GiB, rounded to one decimal.
     disk = payload.get("disk")

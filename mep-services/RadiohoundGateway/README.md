@@ -92,7 +92,12 @@ payload contains `mac_address`, `short_name`, `broker_name`, and a `sensors` arr
 `type: "sensors.mep"` entry. Its `capabilities.serial` is the configured node
 identity used for compatibility, not an independently measured hardware serial.
 Existing HostManager values supply hostname, kernel release, hardware platform,
-CPU/memory percentages, and disk used/free. Disk values are converted from bytes
+CPU/memory percentages, assigned interface IP addresses, and disk used/free.
+The gateway translates public interface addresses into RadioHound's
+space-separated `IP_addr` field, default interface first, excluding loopback,
+link-local, unspecified, and multicast addresses. At most eight distinct
+addresses are forwarded. No addresses are looked up independently by the gateway.
+Disk values are converted from bytes
 to GiB rounded to one decimal, matching Icarus. The website's `system_version`
 field contains the reported system name and kernel release, such as
 `Linux 5.15.148-tegra`; it does not claim a distribution version. Unavailable
