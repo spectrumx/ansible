@@ -11,11 +11,11 @@ import math
 from pathlib import Path
 import re
 import signal
-import socket
 import subprocess
 import sys
 import threading
 import time
+import uuid
 
 import paho.mqtt.client as mqtt
 
@@ -51,6 +51,7 @@ SSH_KEY_FILE = "/opt/radiohound/.ssh/id_rsa"
 SSH_LOCAL_PORT = 8083
 SSH_RETRY_S = 10
 SSH_KNOWN_HOSTS_FILE = Path(__file__).resolve().parent / "ssh_known_hosts"
+SSH_CONTROL_DIRECTORY = Path(__file__).resolve().parent
 
 logger = logging.getLogger("radiohoundgateway")
 
@@ -372,21 +373,25 @@ def observe_local(snapshot, stopping, client_factory=MEPClient):
 
 
 class SSHTunnel:
-    """Own one foreground SSH process forwarding to the remote MQTT broker."""
+    """Own the SSH child and confirm its forward before permitting MQTT use."""
 
     def __init__(self, host):
         self.host = host
         self.process = None
+        self.ready = False
         self.retry_at = 0
         self.last_error = None
+        self.control_path = SSH_CONTROL_DIRECTORY / f"ssh-{uuid.uuid4().hex[:12]}.sock"
 
     def maintain(self):
         if self.process is not None:
             return_code = self.process.poll()
             if return_code is None:
+                if not self.ready:
+                    self.open_forward()
                 return
             logger.warning("RadioHound SSH tunnel exited: status %s", return_code)
-            self.process = None
+            self.close()
             self.retry_at = time.monotonic() + SSH_RETRY_S
 
         if time.monotonic() < self.retry_at:
@@ -398,16 +403,14 @@ class SSHTunnel:
             with open(SSH_KEY_FILE, "rb"):
                 pass
 
-            # Do not connect the remote publisher to somebody else's listener.
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener_check:
-                listener_check.bind(("127.0.0.1", SSH_LOCAL_PORT))
-
-            # The listener is loopback-only. Foreground SSH stays owned by this
-            # gateway; ExitOnForwardFailure prevents adopting an occupied port.
+            # No daemonization or persistent master: this Popen handle owns SSH.
+            # A private control socket identifies this child, not another tunnel.
             command = [
-                "/usr/bin/ssh", "-F", "/dev/null", "-N", "-T",
+                "/usr/bin/ssh", "-F", "/dev/null", "-N", "-T", "-M",
+                "-S", str(self.control_path),
                 "-i", SSH_KEY_FILE, "-l", SSH_USER, "-p", str(SSH_PORT),
-                "-L", f"127.0.0.1:{SSH_LOCAL_PORT}:127.0.0.1:{REMOTE_PORT}",
+                "-o", "ControlPersist=no",
+                "-o", "ForkAfterAuthentication=no",
                 "-o", "BatchMode=yes",
                 "-o", "IdentitiesOnly=yes",
                 "-o", "ExitOnForwardFailure=yes",
@@ -433,20 +436,58 @@ class SSHTunnel:
             self.last_error = None
             logger.info("Starting RadioHound SSH tunnel to %s:%s", self.host, SSH_PORT)
 
-    def close(self):
-        if self.process is None:
+    def open_forward(self):
+        # The control socket becomes available after SSH authentication.
+        if not self.control_path.exists():
             return
-        if self.process.poll() is None:
-            try:
-                self.process.terminate()
-            except ProcessLookupError:
-                pass
+
+        # OpenSSH owns port binding and reports whether this exact master's
+        # forward was installed. A live process or an open port alone is not ready.
+        command = [
+            "/usr/bin/ssh", "-F", "/dev/null", "-S", str(self.control_path),
+            "-O", "forward",
+            "-L", f"127.0.0.1:{SSH_LOCAL_PORT}:127.0.0.1:{REMOTE_PORT}",
+            "-o", "ExitOnForwardFailure=yes",
+            "--", self.host,
+        ]
         try:
-            self.process.wait(timeout=3)
-        except subprocess.TimeoutExpired:
-            self.process.kill()
-            self.process.wait(timeout=1)
-        self.process = None
+            result = subprocess.run(
+                command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, text=True, timeout=2, check=False,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(result.stderr.strip() or "SSH forwarding request failed")
+        except (OSError, subprocess.TimeoutExpired, RuntimeError) as error:
+            logger.error("Cannot establish RadioHound SSH forward: %s", error)
+            self.close()
+            self.retry_at = time.monotonic() + SSH_RETRY_S
+            return
+
+        self.ready = self.process.poll() is None
+
+    def close(self):
+        self.ready = False
+        if self.process is not None:
+            if self.process.poll() is None:
+                try:
+                    self.process.terminate()
+                except ProcessLookupError:
+                    pass
+            try:
+                self.process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                try:
+                    self.process.kill()
+                except ProcessLookupError:
+                    pass
+                self.process.wait(timeout=1)
+            self.process = None
+
+        # Remove only this tunnel's unique control socket, after its child exits.
+        try:
+            self.control_path.unlink(missing_ok=True)
+        except OSError as error:
+            logger.warning("Could not remove RadioHound SSH control socket: %s", error)
 
 
 def remote_client(node_id, connected_event, connection_failed):
@@ -560,11 +601,13 @@ def run():
                 snapshot.take_spectrum()
             if tunnel is not None:
                 tunnel.maintain()
-                if tunnel.process is None and tunnel_mqtt_started:
+                if stopping.is_set():
+                    break
+                if not tunnel.ready and tunnel_mqtt_started:
                     remote.disconnect()
                     remote.loop_stop()
                     tunnel_mqtt_started = False
-                elif tunnel.process is not None and not tunnel_mqtt_started:
+                elif tunnel.ready and not tunnel_mqtt_started:
                     remote.connect_async("127.0.0.1", SSH_LOCAL_PORT, keepalive=30)
                     remote.loop_start()
                     tunnel_mqtt_started = True
@@ -601,13 +644,16 @@ def run():
     finally:
         stopping.set()
         try:
-            if remote is not None:
-                remote.disconnect()
-                remote.loop_stop()
+            # Release the forward and reap SSH before waiting on MQTT's thread.
+            if tunnel is not None:
+                tunnel.close()
         finally:
             try:
-                if tunnel is not None:
-                    tunnel.close()
+                if remote is not None:
+                    try:
+                        remote.disconnect()
+                    finally:
+                        remote.loop_stop()
             finally:
                 observer.join(timeout=3)
 

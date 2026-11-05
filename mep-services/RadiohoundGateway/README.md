@@ -56,12 +56,23 @@ this gateway directory. A changed recorded host key is rejected. No global SSH
 configuration or known-hosts files are changed. This generated host-key file
 contains server public keys, not the private authentication key.
 
-SSH binds only to loopback and requires the forwarding port to be free. A failed
-or exited child is retried every 10 seconds. SSH errors go to the journal, and
-MQTT reconnects while the tunnel is established. Once switched, this process
-continues using SSH; a gateway restart tries direct MQTT again. SIGINT/SIGTERM
-terminates and reaps the gateway's own SSH child. Other SSH processes are not
-adopted or stopped.
+The gateway owns one foreground SSH master with daemonization and connection
+persistence disabled. Each master has a unique `ssh-<id>.sock` control socket
+inside this gateway directory. It requests the loopback-only
+forward through that exact master's control socket. Remote MQTT starts only
+after OpenSSH confirms the forwarding request succeeded. There is no Python
+port-binding probe, and an existing listener is never treated as our tunnel.
+
+A failed or exited child is reaped and retried every 10 seconds. SSH errors go
+to the journal. Once switched, this process continues using SSH; a gateway
+restart tries direct MQTT again. SIGINT/SIGTERM closes the owned SSH child
+before waiting on MQTT shutdown: terminate, wait, then kill and reap if needed.
+Its private control socket is removed after the child exits.
+
+The unit explicitly uses `KillMode=control-group` and `SendSIGKILL=yes` with a
+20-second stop timeout. Systemd cleans up remaining processes in this unit on
+stop or failure. No runtime directory outside the gateway folder is created.
+Other units, SSH processes, and listeners are not adopted or stopped.
 
 No broker bridge is installed, no MQTT container is restarted, and no other
 service is reconfigured. SSH/MQTT failures affect only gateway publication.

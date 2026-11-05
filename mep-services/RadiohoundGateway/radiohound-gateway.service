@@ -10,7 +10,9 @@ Group=root
 Environment=PYTHONUNBUFFERED=true
 Restart=always
 RestartSec=10
-TimeoutStopSec=10
+KillMode=control-group
+SendSIGKILL=yes
+TimeoutStopSec=20
 
 [Install]
 WantedBy=multi-user.target
