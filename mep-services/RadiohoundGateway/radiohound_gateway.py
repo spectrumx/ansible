@@ -34,6 +34,9 @@ NODE_ID = ""
 
 # Default display name: MEP-<last four ID digits>.
 NODE_NAME = ""
+
+# RadioHound's legacy registration associates MEP nodes with this group.
+NODE_GROUP = "MEP"
 LOCAL_HOST = "localhost"
 LOCAL_PORT = 1883
 REMOTE_HOST = ""
@@ -282,7 +285,7 @@ class StatusSnapshot:
                 "current": self._connected,
             }
 
-    def announcement(self, node_id, node_name, host):
+    def announcement(self, node_id, node_name, host, node_group=NODE_GROUP, message="ANNOUNCE"):
         with self._lock:
             capabilities = {"serial": node_id}
             for name in COMPONENT_FIELDS:
@@ -337,10 +340,12 @@ class StatusSnapshot:
         node_fields.update({
             "mac_address": node_id,
             "short_name": node_name or f"MEP-{node_id[-4:]}",
+            "group_name": node_group,
+            "groups": [node_group],
             "broker_name": host,
             "sensors": [{"type": "sensors.mep", "capabilities": capabilities}],
         })
-        return {"message": "ANNOUNCE", "payload": node_fields}
+        return {"message": message, "payload": node_fields}
 
 # ============================= #
 #       LOCAL OBSERVATION       #
@@ -577,6 +582,9 @@ def run():
     node_name = NODE_NAME or config.get("short_name", "")
     if not isinstance(node_name, str):
         raise ValueError("short_name must be a string")
+    node_group = config.get("group_name") or NODE_GROUP
+    if not isinstance(node_group, str):
+        raise ValueError("group_name must be a string")
 
     # Start local observation independently of the external connection.
     snapshot = StatusSnapshot()
@@ -592,6 +600,7 @@ def run():
     tunnel_mqtt_started = False
     pending = None
     next_announcement = 0
+    initial_announcement = True
     invalid_spectrum_reported = False
     try:
         if not node_id:
@@ -644,15 +653,20 @@ def run():
                 connected_event.clear()
                 pending = None
                 next_announcement = 0
+                initial_announcement = True
                 snapshot.take_spectrum()
             if not remote.is_connected():
                 pending = None
                 snapshot.take_spectrum()
             elif pending is None or pending.rc != mqtt.MQTT_ERR_SUCCESS or pending.is_published():
                 if time.monotonic() >= next_announcement:
-                    payload = snapshot.announcement(node_id, node_name, host)
+                    # Match Icarus registration on each connection before updates.
+                    message = "INITIAL" if initial_announcement else "ANNOUNCE"
+                    payload = snapshot.announcement(node_id, node_name, host, node_group, message)
                     pending = remote.publish(topic, json.dumps(payload, allow_nan=False), qos=0, retain=False)
-                    next_announcement = time.monotonic() + ANNOUNCE_INTERVAL_S
+                    if pending.rc == mqtt.MQTT_ERR_SUCCESS:
+                        initial_announcement = False
+                        next_announcement = time.monotonic() + ANNOUNCE_INTERVAL_S
                 else:
                     message = snapshot.take_spectrum()
                     if message is not None:

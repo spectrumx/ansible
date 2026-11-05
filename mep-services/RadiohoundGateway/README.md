@@ -87,10 +87,18 @@ Status announcements are non-retained, QoS 0:
 radiohound/clients/announce/<node_id>
 ```
 
-The legacy envelope is `{"message": "ANNOUNCE", "payload": {...}}`. Its nested
-payload contains `mac_address`, `short_name`, `broker_name`, and a `sensors` array with one
+The first registration after each remote connection uses
+`{"message": "INITIAL", "payload": {...}}`, followed by periodic `ANNOUNCE`
+updates, matching Icarus's message types. Its nested
+payload contains `mac_address`, `short_name`, `group_name`, `groups`, `broker_name`, and a `sensors` array with one
 `type: "sensors.mep"` entry. Its `capabilities.serial` is the configured node
 identity used for compatibility, not an independently measured hardware serial.
+`group_name` comes from an explicitly selected existing system configuration,
+or defaults to the configurable `NODE_GROUP = "MEP"`. The same group is
+advertised in `groups`. RadioHound Web uses membership in `MEP` to select its
+MEP spectrum viewer; a node without it takes the general RadioHound viewer path.
+The gateway supplies these registration fields rather than synthesizing
+RadioHound's `display_name`.
 Existing HostManager values supply hostname, kernel release, hardware platform,
 CPU/memory percentages, assigned interface IP addresses, and disk used/free.
 The gateway translates public interface addresses into RadioHound's
@@ -177,17 +185,17 @@ The gateway automatically forwards available spectrum and never starts Recorder.
 It has no remote command subscription, Start/Stop handlers, or browser selection
 based on acquisition commands.
 
-The supplied live source topic is `radiohound/clients/data/48b02dfbb0f9`.
-Icarus obtained its device identity from the host MAC with colons removed;
-`48b02dfbb0f9` has the MAC-shaped form `48:b0:2d:fb:b0:f9`. A browser UUID is a
+Source topics use `radiohound/clients/data/<node-id>`.
+Icarus obtained its device identity from the host MAC with colons removed.
+A browser UUID is a
 separate recipient identifier for browser-addressed delivery. The gateway does
 not need to discover a browser UUID to publish a node's existing stream.
 Existing browser/session suffixes are preserved when present; node-only topics
 remain node-only. The Web's `Spectrum.tsx` emits `join_mep` with the selected
 node, indicating a node-viewing path separate from UUID-addressed scan output.
-The supplied App snapshot has no matching `join_mep` handler, so those snapshots
-do not establish end-to-end node-view delivery. This does not make browser UUID
-registration a gateway requirement or justify adding acquisition handlers.
+MEP group membership selects this viewer in the node detail page. Browser UUID
+registration is not a gateway requirement and acquisition handlers are not
+needed for passive viewing.
 Optional future UUID/topic construction is retained in
 [plan_radiohound_phase2.md](plan_radiohound_phase2.md); it is not a Phase I prerequisite.
 
