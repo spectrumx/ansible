@@ -11,6 +11,8 @@ import math
 from pathlib import Path
 import re
 import signal
+import socket
+import subprocess
 import sys
 import threading
 import time
@@ -41,6 +43,14 @@ DEFAULT_REMOTE_HOST = "radiohound.ee.nd.edu"
 REMOTE_PORT = 1883
 ANNOUNCE_INTERVAL_S = 10
 LOCAL_RETRY_S = 10
+
+# Remote MQTT transport through SSH when the direct connection fails.
+SSH_USER = "git"
+SSH_PORT = 22
+SSH_KEY_FILE = "/opt/radiohound/.ssh/id_rsa"
+SSH_LOCAL_PORT = 8083
+SSH_RETRY_S = 10
+SSH_KNOWN_HOSTS_FILE = Path(__file__).resolve().parent / "ssh_known_hosts"
 
 logger = logging.getLogger("radiohoundgateway")
 
@@ -354,7 +364,85 @@ def observe_local(snapshot, stopping, client_factory=MEPClient):
 # ============================= #
 
 
-def remote_client(node_id, connected_event):
+class SSHTunnel:
+    """Own one foreground SSH process forwarding to the remote MQTT broker."""
+
+    def __init__(self, host):
+        self.host = host
+        self.process = None
+        self.retry_at = 0
+        self.last_error = None
+
+    def maintain(self):
+        if self.process is not None:
+            return_code = self.process.poll()
+            if return_code is None:
+                return
+            logger.warning("RadioHound SSH tunnel exited: status %s", return_code)
+            self.process = None
+            self.retry_at = time.monotonic() + SSH_RETRY_S
+
+        if time.monotonic() < self.retry_at:
+            return
+        self.retry_at = time.monotonic() + SSH_RETRY_S
+
+        try:
+            # Check access without reading or copying the private key.
+            with open(SSH_KEY_FILE, "rb"):
+                pass
+
+            # Do not connect the remote publisher to somebody else's listener.
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener_check:
+                listener_check.bind(("127.0.0.1", SSH_LOCAL_PORT))
+
+            # The listener is loopback-only. Foreground SSH stays owned by this
+            # gateway; ExitOnForwardFailure prevents adopting an occupied port.
+            command = [
+                "/usr/bin/ssh", "-F", "/dev/null", "-N", "-T",
+                "-i", SSH_KEY_FILE, "-l", SSH_USER, "-p", str(SSH_PORT),
+                "-L", f"127.0.0.1:{SSH_LOCAL_PORT}:127.0.0.1:{REMOTE_PORT}",
+                "-o", "BatchMode=yes",
+                "-o", "IdentitiesOnly=yes",
+                "-o", "ExitOnForwardFailure=yes",
+                "-o", "ConnectTimeout=5",
+                "-o", "ConnectionAttempts=1",
+                "-o", "ServerAliveInterval=15",
+                "-o", "ServerAliveCountMax=3",
+                "-o", "StrictHostKeyChecking=accept-new",
+                "-o", f"UserKnownHostsFile={SSH_KNOWN_HOSTS_FILE}",
+                "-o", "GlobalKnownHostsFile=/dev/null",
+                "-o", "UpdateHostKeys=no",
+                "--", self.host,
+            ]
+            self.process = subprocess.Popen(
+                command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            )
+        except OSError as error:
+            detail = str(error)
+            if detail != self.last_error:
+                logger.error("Cannot start RadioHound SSH tunnel: %s", detail)
+                self.last_error = detail
+        else:
+            self.last_error = None
+            logger.info("Starting RadioHound SSH tunnel to %s:%s", self.host, SSH_PORT)
+
+    def close(self):
+        if self.process is None:
+            return
+        if self.process.poll() is None:
+            try:
+                self.process.terminate()
+            except ProcessLookupError:
+                pass
+        try:
+            self.process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            self.process.kill()
+            self.process.wait(timeout=1)
+        self.process = None
+
+
+def remote_client(node_id, connected_event, connection_failed):
     """Create the publish-only remote client; never subscribe to commands."""
     client = mqtt.Client(
         callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
@@ -380,7 +468,11 @@ def remote_client(node_id, connected_event):
 
     client.on_connect = on_connect
     client.on_disconnect = on_disconnect
-    client.on_connect_fail = lambda client, userdata: report("unavailable; reconnecting")
+    def on_connect_fail(client, userdata):
+        report("connection attempt failed")
+        connection_failed.set()
+
+    client.on_connect_fail = on_connect_fail
     return client
 
 # ============================= #
@@ -397,10 +489,12 @@ def run():
     node_id = NODE_ID.lower()
     if node_id and not re.fullmatch(r"[0-9a-f]{12}", node_id):
         raise ValueError("NODE_ID must contain exactly 12 hexadecimal digits")
-    if ANNOUNCE_INTERVAL_S <= 0 or LOCAL_RETRY_S <= 0:
+    if ANNOUNCE_INTERVAL_S <= 0 or LOCAL_RETRY_S <= 0 or SSH_RETRY_S <= 0:
         raise ValueError("Announcement and retry intervals must be positive")
     if not 1 <= LOCAL_PORT <= 65535 or not 1 <= REMOTE_PORT <= 65535:
         raise ValueError("MQTT ports must be between 1 and 65535")
+    if not 1 <= SSH_PORT <= 65535 or not 1 <= SSH_LOCAL_PORT <= 65535:
+        raise ValueError("SSH ports must be between 1 and 65535")
 
     config = system_config()
     host = broker_host(config)
@@ -418,6 +512,8 @@ def run():
     )
     observer.start()
     remote = None
+    tunnel = None
+    tunnel_mqtt_started = False
     pending = None
     next_announcement = 0
     invalid_spectrum_reported = False
@@ -432,10 +528,11 @@ def run():
             if stopping.is_set():
                 return
 
-        # Connect directly to the selected broker; never create tunnels or bridges.
+        # Try the direct remote connection first, following Icarus's convention.
         logger.info("Announcing node %s to %s:%s", node_id, host, REMOTE_PORT)
         connected_event = threading.Event()
-        remote = remote_client(node_id, connected_event)
+        connection_failed = threading.Event()
+        remote = remote_client(node_id, connected_event, connection_failed)
         topic = f"radiohound/clients/announce/{node_id}"
 
         # connect_async keeps DNS/connect/retry work off the local observer thread.
@@ -445,6 +542,26 @@ def run():
         # Announcements take priority. Spectrum uses the gaps between them;
         # both share a single outstanding publication and a latest-only cache.
         while not stopping.is_set():
+            if tunnel is None and connection_failed.is_set():
+                logger.info("Direct RadioHound MQTT connection failed; switching to SSH transport")
+                remote.disconnect()
+                remote.loop_stop()
+                if stopping.is_set():
+                    break
+                tunnel = SSHTunnel(host)
+                pending = None
+                snapshot.take_spectrum()
+            if tunnel is not None:
+                tunnel.maintain()
+                if tunnel.process is None and tunnel_mqtt_started:
+                    remote.disconnect()
+                    remote.loop_stop()
+                    tunnel_mqtt_started = False
+                elif tunnel.process is not None and not tunnel_mqtt_started:
+                    remote.connect_async("127.0.0.1", SSH_LOCAL_PORT, keepalive=30)
+                    remote.loop_start()
+                    tunnel_mqtt_started = True
+
             if connected_event.is_set():
                 connected_event.clear()
                 pending = None
@@ -476,10 +593,16 @@ def run():
             stopping.wait(0.05)
     finally:
         stopping.set()
-        if remote is not None:
-            remote.disconnect()
-            remote.loop_stop()
-        observer.join(timeout=3)
+        try:
+            if remote is not None:
+                remote.disconnect()
+                remote.loop_stop()
+        finally:
+            try:
+                if tunnel is not None:
+                    tunnel.close()
+            finally:
+                observer.join(timeout=3)
 
 
 if __name__ == "__main__":

@@ -36,11 +36,37 @@ unconfigured idle mode. If identity is not yet available, the gateway observes
 local status and waits for HostManager rather than publishing as an invented
 node. An explicit `NODE_ID` can identify a host without HostManager network data.
 
-Connection loss is retried. There is deliberately no SSH tunnel, broker bridge,
-Docker inspection, network probe subprocess, or offline data spool. Those were
-Icarus infrastructure actions, not read-only node reporting. If the old site
-relied on a tunnel because direct access to port 1883 was blocked, connectivity
-must be supplied separately; the gateway does not manage that infrastructure.
+## Remote connection and SSH transport
+
+The gateway first attempts direct MQTT to the selected remote broker. If that
+connection attempt fails, it switches to SSH using the same broker host,
+account `git`, port 22, and existing key `/opt/radiohound/.ssh/id_rsa`.
+The foreground SSH child forwards `127.0.0.1:8083` to the remote host's
+`127.0.0.1:1883` by default. The gateway's remote publisher then connects to
+that tunnel entrance. This is a transport to the remote broker; the local MEP
+broker is still accessed only through `MEPClient`.
+
+The systemd unit runs as root so it can read the existing root-only key.
+Key ownership and permissions are unchanged. No sudo subprocess or private-key
+copy is needed. OpenSSH must be available at `/usr/bin/ssh`; authentication uses
+the configured key noninteractively, without password prompts.
+
+SSH accepts a host key on first use and records it in `ssh_known_hosts` inside
+this gateway directory. A changed recorded host key is rejected. No global SSH
+configuration or known-hosts files are changed. This generated host-key file
+contains server public keys, not the private authentication key.
+
+SSH binds only to loopback and requires the forwarding port to be free. A failed
+or exited child is retried every 10 seconds. SSH errors go to the journal, and
+MQTT reconnects while the tunnel is established. Once switched, this process
+continues using SSH; a gateway restart tries direct MQTT again. SIGINT/SIGTERM
+terminates and reaps the gateway's own SSH child. Other SSH processes are not
+adopted or stopped.
+
+No broker bridge is installed, no MQTT container is restarted, and no other
+service is reconfigured. SSH/MQTT failures affect only gateway publication.
+There is no offline data spool. SSH settings are constants alongside the other
+configuration in `radiohound_gateway.py`.
 
 ## Status contract
 
@@ -150,7 +176,7 @@ Optional future UUID/topic construction is retained in
 
 The unit is directly in this directory so `start_services.py`,
 `stop_services.py`, and `restart_services.py` discover it through their existing
-`*/*.service` pattern. It runs as `mep` using `/opt/radioconda/bin/python` and
+`*/*.service` pattern. It runs as `root` using `/opt/radioconda/bin/python` and
 imports the adjacent shared client from `/opt/ansible/mep-services`.
 Other local services do not depend on it. No startup-helper changes are needed.
 
