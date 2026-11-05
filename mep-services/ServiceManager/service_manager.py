@@ -47,6 +47,7 @@ MANAGED_UNITS = (
     "capture-orchestrator.service",
     "docker-manager.service",
     "host-manager.service",
+    "radiohound-gateway.service",
     "ringbuffer.service",
     "tuner-control.service",
     "upload-manager.service",
