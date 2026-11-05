@@ -723,10 +723,13 @@ class RecorderClient:
 
 
 class SpectrumClient:
+    """One spectrum subscription exposing canonical frames and source messages."""
+
     def __init__(self, message_bus):
         self.bus = message_bus
         self._topic = bus.SPECTRUM_TOPIC_PATTERN
         self._callbacks = []
+        self._source_message_callbacks = []
         self._active = False
         self.bus.on_status_pattern(self._topic, self._on_payload, subscribe=False)
 
@@ -735,7 +738,18 @@ class SpectrumClient:
         return self._topic
 
     def on_frame(self, callback):
+        """Register callback(frame) for canonical decoded spectrum rows in dBFS."""
         self._callbacks.append(callback)
+
+    def on_source_message(self, callback):
+        """Register callback(topic, payload) for the original JSON spectrum message.
+
+        The payload retains its encoded data and all metadata; it is not the
+        original MQTT bytes. Treat it as read-only, and keep callbacks brief
+        because they run on the bus thread. Uses the same start/stop and topic
+        selection as on_frame(), without requiring spectrum decoding.
+        """
+        self._source_message_callbacks.append(callback)
 
     def set_topic(self, topic: str):
         topic = str(topic).strip()
@@ -763,6 +777,13 @@ class SpectrumClient:
             self._active = False
 
     def _on_payload(self, topic, payload):
+        for callback in tuple(self._source_message_callbacks):
+            try:
+                callback(topic, payload)
+            except Exception:
+                logging.exception("Spectrum source message listener failed for %s", topic)
+        if not self._callbacks:
+            return
         frame = self._decode(payload)
         if frame is None:
             return

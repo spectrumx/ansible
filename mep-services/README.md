@@ -54,3 +54,26 @@ Announce and status publications are retained. Correlated responses include the
 request `session_id` and are not retained.
 
 The individual component READMEs describe exceptions and detailed payloads.
+
+## Spectrum client
+
+`MEPClient.spectrum` exposes two callback interfaces on one subscription:
+
+- `on_source_message(callback)` calls `callback(topic, payload)` with the original
+  parsed JSON message, preserving encoded data and metadata. It does not decode
+  spectrum samples or preserve the original MQTT byte serialization.
+- `on_frame(callback)` is the canonical application interface. It calls
+  `callback(frame)` with the decoded float32 spectrum row in dBFS, as used by
+  MEPGui. Source-message access preserves the producer representation for
+  forwarding or diagnostics.
+
+Both follow the same `set_topic()`, `start()`, and `stop()` lifecycle. Spectrum
+samples are decoded only when a frame callback is registered. Callbacks run on
+the bus thread: treat payloads as read-only and enqueue any slow processing.
+Consumers own display history and waterfall rendering.
+
+Run the focused tests without a broker or hardware:
+
+```text
+python -B -m unittest discover -s mep-services/mep_client/tests -v
+```
