@@ -203,7 +203,7 @@ Optional future UUID/topic construction is retained in
 
 The unit is directly in this directory so `start_services.py`,
 `stop_services.py`, and `restart_services.py` discover it through their existing
-`*/*.service` pattern. It runs as `root` using `/opt/radioconda/bin/python` and
+`*/*.service` pattern. It runs as `root` using `/opt/radiohound/python313/bin/python` and
 imports the adjacent shared client from `/opt/ansible/mep-services`.
 Other local services do not depend on it. No startup-helper changes are needed.
 

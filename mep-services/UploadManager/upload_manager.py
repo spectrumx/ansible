@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/opt/radiohound/python313/bin/python
 """Background SDS uploads with state stored inside each capture directory."""
 
 # ============================= #

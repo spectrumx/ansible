@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/opt/radiohound/python313/bin/python
 """Docker and Docker Compose management exposed through MQTT."""
 
 # ============================= #

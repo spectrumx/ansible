@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/opt/radiohound/python313/bin/python
 """Systemd service lifecycle and journal access exposed through MQTT."""
 
 # ============================= #

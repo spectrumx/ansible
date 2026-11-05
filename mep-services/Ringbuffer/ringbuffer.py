@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/opt/radiohound/python313/bin/python
 """DigitalRF ringbuffer service exposed through MQTT."""
 
 # ============================= #

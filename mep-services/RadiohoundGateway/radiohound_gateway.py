@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/opt/radiohound/python313/bin/python
 """Compatibility adapter between RadioHound and the public MEP client API."""
 
 # ============================= #

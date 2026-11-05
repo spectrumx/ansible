@@ -4,7 +4,7 @@ After=network.target mosquitto.service
 
 [Service]
 Type=simple
-ExecStart=/opt/radioconda/bin/python -B /opt/ansible/mep-services/RadiohoundGateway/radiohound_gateway.py
+ExecStart=/opt/radiohound/python313/bin/python -B /opt/ansible/mep-services/RadiohoundGateway/radiohound_gateway.py
 User=root
 Group=root
 Environment=PYTHONUNBUFFERED=true

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/opt/radiohound/python313/bin/python
 """MQTT service for coordinated RX and TX acquisition workflows."""
 
 # ============================= #
