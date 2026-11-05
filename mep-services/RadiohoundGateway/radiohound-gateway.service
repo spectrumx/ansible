@@ -1,0 +1,16 @@
+[Unit]
+Description=RadioHound Gateway
+After=network.target mosquitto.service
+
+[Service]
+Type=simple
+ExecStart=/opt/radioconda/bin/python -B /opt/ansible/mep-services/RadiohoundGateway/radiohound_gateway.py
+User=mep
+Group=mep
+Environment=PYTHONUNBUFFERED=true
+Restart=always
+RestartSec=10
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target
