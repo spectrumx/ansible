@@ -1,8 +1,12 @@
 # MEP Services
 
-This repository contains the controlled MEP services and the MEPGui client.
-Each service owns its resource and publishes retained state under one canonical
-MQTT root.
+This directory contains the MEP services, the shared `mep_client` API, and the
+MEPGui application. Local services own their resources and expose status and
+commands through MQTT. CaptureOrchestrator owns acquisition workflows; MEPGui
+uses `mep_client` to interact with those services.
+
+RadioHoundGateway is an independent compatibility adapter that observes local
+data through `mep_client` and publishes it to RadioHound.
 
 | Component | Executable | Unit | MQTT root |
 | --- | --- | --- | --- |
@@ -10,32 +14,58 @@ MQTT root.
 | ArchiveManager | `ArchiveManager/archive_manager.py` | `archive-manager.service` | `archivemanager/` |
 | UploadManager | `UploadManager/upload_manager.py` | `upload-manager.service` | `uploadmanager/` |
 | DockerManager | `DockerManager/docker_manager.py` | `docker-manager.service` | `dockermanager/` |
+| ServiceManager | `ServiceManager/service_manager.py` | `service-manager.service` | `servicemanager/` |
 | Ringbuffer | `Ringbuffer/ringbuffer.py` | `ringbuffer.service` | `ringbuffer/` |
 | CaptureOrchestrator | `CaptureOrchestrator/capture_orchestrator.py` | `capture-orchestrator.service` | `captureorchestrator/` |
 | AFEControl | `AFEControl/afe_control.py` | `afe-control.service` | `afecontrol/` |
 | TunerControl | `TunerControl/tuner_control.py` | `tuner-control.service` | `tunercontrol/` |
+| RadioHoundGateway | `RadiohoundGateway/radiohound_gateway.py` | `radiohound-gateway.service` | Remote `radiohound/clients/announce/` and `radiohound/clients/data/` |
 | MEPGui | `MEPGui/mep_gui.py` | none | MQTT client only |
 
-The service source is installed at `/opt/ansible/mep-services`.
+The service source is installed at `/opt/ansible/mep-services`. Service units
+and executable Python entrypoints use `/opt/radiohound/python313/bin/python`.
 
-## Development service testing
+## Starting, stopping, and restarting
 
 Start the services from the current repository:
 
 ```bash
-python3 start_services.py
+/opt/radiohound/python313/bin/python /opt/ansible/mep-services/start_services.py
 ```
 
-The script links the repository's unit files into systemd and restarts them.
-ServiceManager starts last.
+The script discovers `*/*.service`, links the unit files into systemd, reloads
+unit definitions, and starts the services. ServiceManager starts last. These
+helpers do not enable the units at boot.
+
+After updating service code or unit definitions, restart the services:
+
+```bash
+/opt/radiohound/python313/bin/python /opt/ansible/mep-services/restart_services.py
+```
+
+The restart script links the units and reloads systemd before restarting them,
+with ServiceManager last.
 
 Stop every repository-owned systemd service:
 
 ```bash
-python3 stop_services.py
+/opt/radiohound/python313/bin/python /opt/ansible/mep-services/stop_services.py
 ```
 
-ServiceManager stops first, followed by each managed unit.
+ServiceManager stops first, followed by the other discovered units.
+
+## RadioHoundGateway
+
+[RadioHoundGateway](RadiohoundGateway/README.md) provides read-only node presence,
+existing RFSoC, Recorder, tuner, and acquisition status, GNSS location, host
+information, and forwarding of existing spectrum messages. A capture started
+locally can be viewed through RadioHound's MEP spectrum viewer.
+
+The gateway accesses local MEP data exclusively through the public `mep_client`
+API. It accepts no remote acquisition commands, and other local services do not
+depend on it. Gateway or remote-connection failures do not stop local MEP
+operation. Its unit is discovered by the same lifecycle scripts as the other
+services.
 
 ## External dependencies
 
@@ -44,14 +74,14 @@ Their implementations and MQTT interfaces are not owned by this repository.
 MEPGui and CaptureOrchestrator consume those interfaces without redefining
 them.
 
-Icarus is tabled until its external-server communicator contract is defined.
-
 ## MQTT convention
 
 Controlled services use `service/announce`, `service/command`,
 `service/response`, `service/status`, and service-specific data/event topics.
-Announce and status publications are retained. Correlated responses include the
-request `session_id` and are not retained.
+Local service announce and status publications are retained. Correlated responses
+include the request `session_id` and are not retained. RadioHoundGateway's remote
+announcements and spectrum publications are non-retained compatibility messages,
+not local service command/status topics.
 
 The individual component READMEs describe exceptions and detailed payloads.
 
@@ -99,7 +129,8 @@ TunerControl's hardware-dependent command list retain their existing forms.
 AFEControl's configured topic hierarchy, RadiohoundGateway's external
 compatibility interface, and MEPGui's client role have different requirements;
 they do not need the manager-service configuration layout. Services remain
-independent, with no shared service base class or new runtime dependency.
+independent; the shared public client provides application access to their
+interfaces.
 Message schemas, command names, QoS, retention, and lifecycle behavior remain
 defined by the existing service contracts.
 
@@ -120,7 +151,8 @@ samples are decoded only when a frame callback is registered. Callbacks run on
 the bus thread: treat payloads as read-only and enqueue any slow processing.
 Consumers own display history and waterfall rendering.
 
-Run the focused tests without a broker or hardware:
+From the repository root, run the focused client tests without a broker or
+hardware:
 
 ```text
 python -B -m unittest discover -s mep-services/mep_client/tests -v
