@@ -13,6 +13,7 @@ import subprocess
 import threading
 import time
 import uuid
+from pathlib import Path
 from typing import Optional
 
 import paho.mqtt.client as mqtt
@@ -41,17 +42,11 @@ EVENT_TOPIC = f"{SERVICE_NAME}/event"
 LOG_TOPIC = f"{SERVICE_NAME}/logs"
 
 # Service-specific settings
-MANAGED_UNITS = (
-    "afe-control.service",
-    "archive-manager.service",
-    "capture-orchestrator.service",
-    "docker-manager.service",
-    "host-manager.service",
-    "radiohound-gateway.service",
-    "ringbuffer.service",
-    "tuner-control.service",
-    "upload-manager.service",
-)
+# Match the lifecycle helpers' repository discovery; exclude self-management.
+MANAGED_UNITS = tuple(sorted(
+    unit.name for unit in Path(__file__).resolve().parent.parent.glob("*/*.service")
+    if unit.name != "service-manager.service"
+))
 
 SERVICE_ACTIONS = {
     "start_services": "start",

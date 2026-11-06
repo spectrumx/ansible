@@ -23,6 +23,15 @@ ServiceManager owns lifecycle and journal access for the repository's systemd se
 
 Service-scoped commands receive a non-empty `services` array containing exact allowlisted systemd unit names. `service-manager.service` is deliberately not managed, because stopping the MQTT process handling its own request would make acknowledgement and state publication unreliable.
 
+At startup, ServiceManager discovers `mep-services/*/*.service`, matching the
+start/stop/restart helpers. Adding a service unit to its service folder makes it
+part of the managed list after ServiceManager restarts; no second registry needs
+editing. The usual restart helper restarts ServiceManager after the other units.
+Commands remain limited to these repository unit names.
+
+MEPGui and MEPCli are applications, so neither appears as a systemd service.
+Their `mep` and `mep_capture` commands are installed by `mep-services.yml`.
+
 The retained announce payload publishes this allowlist as `managed_services`,
 and retained status publishes one state row per unit. Clients such as MEPGui
 must build their service selector from those fields rather than duplicating the
