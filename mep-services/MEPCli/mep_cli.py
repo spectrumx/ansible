@@ -51,7 +51,7 @@ def capture_overrides(arguments):
 
 
 def run(arguments, client_factory=None):
-    document = {"format_version": 1, "settings": {}}
+    document = {"settings": {}}
     if arguments.document:
         try:
             document = json.loads(Path(arguments.document).read_text(encoding="utf-8-sig"))

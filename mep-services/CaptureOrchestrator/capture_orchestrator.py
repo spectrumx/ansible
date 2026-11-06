@@ -24,7 +24,7 @@ import paho.mqtt.client as mqtt
 import yaml
 
 from capture_settings import (
-    CHANNEL_DEVICES, MISC_DEFAULTS, RX_DEFAULTS, afe_register_commands,
+    CHANNEL_DEVICES, DOCUMENT_VERSION, MISC_DEFAULTS, RX_DEFAULTS, afe_register_commands,
     legacy_document, recorder_settings, resolve_document, rx_arguments,
 )
 
@@ -95,6 +95,7 @@ COMMAND_DESCRIPTIONS = {
             "recorder_draft": {"type": "object", "optional": True},
             "afe_defaults": {"type": "object", "optional": True, "description": "AFE baseline for omitted file fields, such as current GUI choices."},
             "settings_overrides": {"type": "object", "optional": True, "description": "Explicit settings applied over the document before resolution."},
+            "capture_name": {"type": "string", "optional": True, "description": "Output name used when describing the resolved configuration; no capture is created."},
         },
     },
     "get_status": {"description": "Return current acquisition workflow state.", "arguments": {}},
@@ -1292,20 +1293,27 @@ class CaptureOrchestrator:
         self.rx = Rx(mqtt_client, statuses, self.rx_state)
         self.tx = Tx(mqtt_client, self.tx_state)
 
-    def resolve_settings(self, document, afe_defaults=None):
+    def resolve_settings(self, document, afe_defaults=None, capture_name=None):
         # Stateless: preview never alters ConfigManager's staged input or hardware.
         model = resolve_document(document, resolve_recorder_preset, afe_defaults)
         recorder_draft_to_overrides(model["recorder_model"]["values"])
+        resolved = self._resolved_rx(model, capture_name)
+        self._describe_capture(resolved, model["recorder_model"])
+        model["document"] = resolved["capture_settings"]
         return model
 
     def _document_rx(self, arguments):
-        model = self.resolve_settings(arguments["document"])
+        model = self.resolve_settings(arguments["document"], capture_name=arguments.get("capture_name"))
+        return self._resolved_rx(model, arguments.get("capture_name")), model["recorder_model"]
+
+    @staticmethod
+    def _resolved_rx(model, capture_name):
         request = rx_arguments(model["document"], model["recorder_overrides"])
-        request["settings"]["capture"] = {"name": arguments.get("capture_name")}
+        request["settings"]["capture"] = {"name": capture_name}
         resolved = ConfigManager().resolve_rx(request)
         resolved["capture_settings"] = model["document"]
         resolved["afe_commands"] = afe_register_commands(model["document"]["settings"]["afe"])
-        return resolved, model["recorder_model"]
+        return resolved
 
     def _current_afe_settings(self, channel):
         """Use available readback when documenting an existing GUI/API request."""
@@ -1330,6 +1338,8 @@ class CaptureOrchestrator:
             saved = legacy_document(saved)
             saved["settings"]["afe"] = self._current_afe_settings(resolved["channel"])
             saved["settings"]["recorder"] = recorder_settings(recorder_model, resolved.get("recorder_overrides", {}))
+        saved.pop("format_version", None)
+        saved["document"] = {"type": CONFIG_TYPE, "version": DOCUMENT_VERSION}
         config = deepcopy(recorder_model["config"])
         for key, value in recorder_config_overrides(resolved):
             _set_dotted_value(config, key, value)
@@ -1351,6 +1361,11 @@ class CaptureOrchestrator:
                 "external_tuner_model": self._resolved_tuner_model(self.statuses.latest(TUNER_STATUS)) if resolved["external_tuner_enabled"] else None,
             },
             "recorder_config": config,
+            "component_status": {
+                "rfsoc": deepcopy(self.statuses.latest(RFSOC_STATUS)),
+                "recorder": deepcopy(self.statuses.latest(RECORDER_STATUS)),
+                "tuner": deepcopy(self.statuses.latest(TUNER_STATUS)),
+            },
             "afe_registers": deepcopy(self.statuses.latest(AFE_REGISTERS)),
             "afe_registers_source": "last_reported_before_configuration",
         }
@@ -1365,10 +1380,14 @@ class CaptureOrchestrator:
             current.pop("afe", None)
         return previous == current
 
-    def _prepare_capture(self, resolved_rx: dict, recorder_model: dict) -> dict:
+    def _describe_capture(self, resolved_rx, recorder_model):
+        """Assemble the same complete document for Save and acquisition, without I/O."""
         self._resolve_external_tuner(resolved_rx)
         self._resolve_conjugate(resolved_rx)
         self._capture_document(resolved_rx, recorder_model)
+
+    def _prepare_capture(self, resolved_rx: dict, recorder_model: dict) -> dict:
+        self._describe_capture(resolved_rx, recorder_model)
         capture_name = resolved_rx.get("capture_name")
         if not capture_name:
             return resolved_rx
@@ -1476,7 +1495,7 @@ class CaptureOrchestrator:
             if "recorder_draft" in arguments:
                 overrides = recorder_draft_to_overrides(arguments["recorder_draft"])
                 document.setdefault("settings", {}).setdefault("recorder", {}).setdefault("overrides", {}).update(overrides)
-            model = self.resolve_settings(document, afe_defaults=arguments.get("afe_defaults"))
+            model = self.resolve_settings(document, afe_defaults=arguments.get("afe_defaults"), capture_name=arguments.get("capture_name"))
             return {"document": model["document"], "recorder_model": model["recorder_model"], "recorder_overrides": model["recorder_overrides"]}
         if task_name == "load_config":
             return self.config.load(arguments["path"])

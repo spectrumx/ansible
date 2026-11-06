@@ -85,7 +85,7 @@ For example, `experiment.json` can contain:
 
 ```json
 {
-  "format_version": 1,
+  "document": {"type": "mep_capture_settings", "version": 2},
   "name": "1775 MHz observation",
   "settings": {
     "acquisition": {"frequency_hz": 1775000000, "duration_s": 15},
@@ -168,4 +168,6 @@ mep.capture.stop_rx(callback=report_stop)
 ```
 
 These calls are asynchronous. Resolution has no equipment or shared-staging
-effects. Use the resolved response's `document` when starting a resolved recipe.
+effects. Its returned document contains the identifier, complete settings, and
+detailed record used by GUI Save and capture creation. Use the resolved response's
+`document` when starting a resolved recipe.

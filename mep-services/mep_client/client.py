@@ -70,8 +70,8 @@ class CaptureClient(ComponentClient):
     def start_rx(self, callback=None, **arguments):
         return self.request("start_rx", arguments, callback=callback)
 
-    def resolve_settings(self, document, callback=None, recorder_draft=None, afe_defaults=None, settings_overrides=None):
-        """Preview without equipment changes; optional AFE defaults fill omitted file fields."""
+    def resolve_settings(self, document, callback=None, recorder_draft=None, afe_defaults=None, settings_overrides=None, capture_name=None):
+        """Build a complete settings document without equipment or shared-state changes."""
         arguments = {"document": document}
         if recorder_draft is not None:
             arguments["recorder_draft"] = recorder_draft
@@ -79,6 +79,8 @@ class CaptureClient(ComponentClient):
             arguments["afe_defaults"] = afe_defaults
         if settings_overrides is not None:
             arguments["settings_overrides"] = settings_overrides
+        if capture_name is not None:
+            arguments["capture_name"] = capture_name
         return self.request("resolve_settings", arguments, callback=callback)
 
     def start_document(self, document, capture_name=None, callback=None):

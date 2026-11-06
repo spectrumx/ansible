@@ -87,7 +87,7 @@ A user-authored JSON file can contain just the choices that matter:
 
 ```json
 {
-  "format_version": 1,
+  "document": {"type": "mep_capture_settings", "version": 2},
   "name": "1775 MHz observation",
   "settings": {
     "acquisition": {"frequency_hz": 1775000000, "duration_s": 15},
@@ -102,6 +102,10 @@ Omitted choices use defined defaults, rather than another client's staged state.
 Unknown operational fields and invalid values are rejected before acquisition
 commands. `record` is descriptive and is ignored when reusing a document.
 A format number alone does not reject an otherwise understood recipe.
+Generated documents use the type identifier above and version 2 for the
+`settings`/`record` structure. Existing `format_version: 1` recipes and the older
+`input`/`effective` documents remain readable. The identifier is optional in
+handwritten requests; the owning service adds it to the completed document.
 
 | Settings field | Default and meaning | Existing operation |
 | --- | --- | --- |
@@ -137,6 +141,10 @@ mep.capture.start_document(document, capture_name="trial-01", callback=report_st
 ```
 
 `resolve_settings` returns `document`, `recorder_model`, and `recorder_overrides`.
+The returned document includes the complete `settings` and `record`, using the
+same builder as capture creation. Optional `capture_name` describes the output
+paths for that name without creating a directory or starting a capture. GUI Save
+supplies its Capture Name control and writes the returned document unchanged.
 Its optional `settings_overrides` object overlays explicit choices on a supplied
 document before validation, including recognized historical documents. MEPCli
 uses this for config-plus-argument requests. Omitted overrides preserve the
@@ -171,7 +179,13 @@ complete portable `settings` plus a generated `record` with:
 - Resolved RF target, channel, input/output rates, conjugation and tuner model.
 - The full Recorder configuration assembled using the same ordered overrides
   as Recorder command generation, including channel port and output paths.
-- Available register readback from before configuration.
+- Available component status and register readback from before configuration.
+
+GUI Save uses this same document structure and includes the same detail. It
+records the currently resolved configuration and available status without
+applying settings. Starting a capture assembles the document again using the
+submitted settings and status available then. With the same settings, output
+name, presets, and available status, the two documents have identical contents.
 
 Missing descriptive status is represented as unavailable and does not add a
 capture prerequisite. Paths, observations, and snapshots in `record` are never

@@ -89,8 +89,10 @@ alone does not install it. `mep` retains its existing GUI link. MEPCli has
 no service unit and is not started by the lifecycle scripts.
 
 Both applications use the same public CaptureOrchestrator document interface.
-A JSON input can contain only selected `settings`; saved captures contain the
-expanded recipe and a descriptive `record` in `data/capture_settings.json`.
+A JSON input can contain only selected `settings`. GUI Save and capture creation
+use the same document builder: both include a `document` type/version identifier,
+expanded `settings`, and the full descriptive `record`. Capture creation writes
+that document to `data/capture_settings.json`; GUI Save writes it to the chosen file.
 Only `settings` is executable. Configuration snapshots and observations in
 `record` are not restored as commands. Existing capture JSON remains readable.
 See [CaptureOrchestrator](CaptureOrchestrator/README.md) for defaults and fields.

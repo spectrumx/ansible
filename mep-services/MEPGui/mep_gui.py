@@ -7669,7 +7669,7 @@ class MEPGui:
         if sweep:
             acquisition["sweep"] = {"end_frequency_hz": int(params["freq_end"] * 1e6), "step_hz": int(params["step"] * 1e6), "dwell_s": params["dwell"]}
         document = {key: self._settings_document[key] for key in ("name", "description") if self._settings_document and key in self._settings_document}
-        document.update(format_version=1, settings={
+        document.update(settings={
             "acquisition": acquisition,
             "receive": {
                 "channel": params["channel"], "sample_rate_hz": params["sample_rate_mhz"] * 1000000,
@@ -7717,15 +7717,16 @@ class MEPGui:
                 for group, values in supplied.items():
                     if isinstance(values, dict):
                         afe_choices.setdefault(group, {}).update(values)
-        elif action == "save":
-            afe_choices = deepcopy(document["settings"].get("afe", {}))
         self._settings_request_seq += 1
         sequence = self._settings_request_seq
 
         def complete(response):
             self._gui_call(self._settings_resolved, sequence, action, response, afe_choices)
 
-        request = self.capture_orchestrator.resolve_settings(document, callback=complete, recorder_draft=draft, afe_defaults=afe_defaults)
+        capture_name = None
+        if action == "save":
+            capture_name = self._vars["capture_name"].get().strip() or None
+        request = self.capture_orchestrator.resolve_settings(document, callback=complete, recorder_draft=draft, afe_defaults=afe_defaults, capture_name=capture_name)
         if not request.get("sent"):
             messagebox.showerror("Capture Settings", "Settings resolution needs a connection to MQTT and a running CaptureOrchestrator. The request could not be sent. No file was saved and controls were not changed.")
         else:
@@ -7745,17 +7746,15 @@ class MEPGui:
             messagebox.showerror("Capture Settings", response.get("error") or "Invalid capture document")
             return
         document = deepcopy(model["document"])
+        if action == "save":
+            self._settings_write(document)
+            return
         if afe_choices is not None:
             resolved_afe = document["settings"]["afe"]
             document["settings"]["afe"] = {
                 group: {key: resolved_afe[group][key] for key in values}
                 for group, values in afe_choices.items() if values
             }
-        if action == "save":
-            if not document["settings"].get("afe"):
-                document["settings"].pop("afe", None)
-            self._settings_write(document)
-            return
         settings = document["settings"]
         acquisition, receive = settings["acquisition"], settings["receive"]
         sweep = acquisition.get("sweep", {})

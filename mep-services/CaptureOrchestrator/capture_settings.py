@@ -15,6 +15,8 @@ from scipy.signal import get_window
 # ============================= #
 
 CHANNEL_DEVICES = {"A": "rxa", "B": "rxb", "C": "rxc", "D": "rxd"}
+DOCUMENT_TYPE = "mep_capture_settings"
+DOCUMENT_VERSION = 2
 TUNER_DEFAULT_IF_MHZ = 1090
 TUNER_DEFAULT_INJECTION = "high"
 MISC_DEFAULTS = {
@@ -153,10 +155,14 @@ def resolve_document(document, recorder_resolver, afe_defaults=None):
     descriptor = document.get("document")
     if "settings" not in document and isinstance(descriptor, dict) and descriptor.get("type") == "mep_capture_settings":
         document = legacy_document(document)
-    mapping(document, ("format_version", "name", "description", "settings", "record"), "document")
-    version = document.get("format_version", 1)
+    mapping(document, ("document", "format_version", "name", "description", "settings", "record"), "document")
+    if "document" in document and "settings" in document:
+        mapping(descriptor, ("type", "version"), "document identifier")
+        if descriptor.get("type") != DOCUMENT_TYPE:
+            raise ValueError(f"document.type must be {DOCUMENT_TYPE}")
+    version = document.get("document", {}).get("version", document.get("format_version", 1))
     if isinstance(version, bool) or not isinstance(version, int) or version < 1:
-        raise ValueError("format_version must be a positive integer")
+        raise ValueError("Document version must be a positive integer")
     # Operational fields define validity; a version number alone is not a gate.
     supplied = mapping(document.get("settings", {}), ("acquisition", "receive", "recorder", "afe"), "settings")
     acquisition = {"mode": "single", "frequency_hz": None, "duration_s": None}
@@ -301,7 +307,7 @@ def resolve_document(document, recorder_resolver, afe_defaults=None):
     overrides["spectrogram.nfft"] = model["values"]["nfft"]
     overrides["spectrogram.noverlap"] = model["values"]["noverlap"]
     recorder = recorder_settings(model, overrides)
-    result = {"format_version": 1}
+    result = {"document": {"type": DOCUMENT_TYPE, "version": DOCUMENT_VERSION}}
     for key in ("name", "description"):
         if key in document:
             if not isinstance(document[key], str):
