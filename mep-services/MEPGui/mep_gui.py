@@ -29,8 +29,9 @@ import queue
 import threading
 import logging
 from collections import deque
+from copy import deepcopy
 import tkinter as tk
-from tkinter import ttk, scrolledtext, messagebox
+from tkinter import ttk, scrolledtext, messagebox, filedialog
 import datetime
 import numpy as np
 from PIL import Image as _PILImage, ImageTk as _PILImageTk
@@ -372,6 +373,10 @@ class MEPGui:
         self._conjugate_policy_user_override = False
         self._rec_pending_overrides = {}
         self._rec_preview_request_seq = 0
+        self._settings_document = None
+        self._settings_afe_pending = None
+        self._settings_afe_edited = set()
+        self._settings_request_seq = 0
 
         self._vars = {}
         self._init_shared_vars()
@@ -538,10 +543,12 @@ class MEPGui:
         values = ["Disabled"]
         if self._advertised_tuner:
             values.append(self._advertised_tuner)
+        elif self._settings_document is not None and tuner_enabled:
+            values.append("Enabled")
         for tuner_combo in self._tuner_combos:
             tuner_combo.configure(values=values)
         tuner_selection.set(
-            self._advertised_tuner if tuner_enabled and self._advertised_tuner else "Disabled"
+            (self._advertised_tuner or "Enabled") if tuner_enabled and (self._advertised_tuner or self._settings_document is not None) else "Disabled"
         )
 
     def _on_afe_status(self, data: dict):
@@ -619,6 +626,7 @@ class MEPGui:
 
         # ---- AFE tab (registers, devices) ---- #
         self._afe_populate_from_announce(data)
+        self._settings_render_afe()
         self._tlm_populate_gps_fields(data)
 
         # ---- Polling interval range/current (service is the sole source of truth) ---- #
@@ -809,6 +817,7 @@ class MEPGui:
         return max(lo, min(hi, value))
 
     def _afe_submit_attenuation(self, device: str):
+        self._settings_afe_edited.add((device, "attenuation_db"))
         bounds = getattr(self, "_afe_atten_range", [0, 31])
         lo, hi = int(bounds[0]), int(bounds[1])
         requested_key = f"afe_{device}_atten_requested"
@@ -824,6 +833,11 @@ class MEPGui:
         )
         if requested_key in self._vars:
             self._vars[requested_key].set(str(value))
+
+        if self._settings_afe_pending is not None and device in self._settings_afe_pending:
+            self._settings_afe_pending[device]["attenuation_db"] = value
+            self._vars[f"afe_{device}_atten_state"].set("")
+            return
 
         session_id = self._afe_next_session_id(f"atten-{device}")
         self._afe_atten_pending[device] = {
@@ -1411,6 +1425,7 @@ class MEPGui:
         ttk.Label(frame, text="Channel").grid(
             row=1, column=0, sticky="w", padx=5, pady=4)
         self._vars["channel"] = tk.StringVar(value="A")
+        self._vars["channel"].trace_add("write", self._settings_channel_changed)
         ttk.Combobox(
             frame, textvariable=self._vars["channel"],
             values=CHANNEL_OPTIONS, width=16, state="readonly",
@@ -1502,6 +1517,13 @@ class MEPGui:
                    command=self._start).grid(row=0, column=0, padx=4, pady=3, sticky="ew")
         ttk.Button(frame, text="Stop", width=14,
                    command=self._stop_all).grid(row=0, column=1, padx=4, pady=3, sticky="ew")
+        self._settings_button = ttk.Menubutton(frame, text="Settings", width=9)
+        menu = tk.Menu(self._settings_button, tearoff=False)
+        menu.add_command(label="Load...", command=self._settings_load)
+        menu.add_command(label="Save...", command=self._settings_save)
+        self._settings_button.configure(menu=menu)
+        self._settings_button.grid(row=0, column=2, padx=4, pady=3)
+        self._add_tooltip(self._settings_button, "Load or save capture settings. Press Start/Update to apply loaded settings.")
 
     def _build_advanced_section(self, parent: ttk.Frame):
         frame = ttk.LabelFrame(parent, text="Advanced Options", width=ADV_PANEL_WIDTH)
@@ -1730,6 +1752,12 @@ class MEPGui:
         self._cap_activity_by_capture = {}
         self._cap_details_capture_name = None
         tree.bind("<<TreeviewSelect>>", self._cap_selection_changed)
+        self._cap_settings_menu = tk.Menu(tree, tearoff=False)
+        for label, action in (("Use Settings", "use"), ("View Settings", "view"), ("Export Settings...", "export")):
+            self._cap_settings_menu.add_command(label=label, command=lambda action=action: self._settings_from_capture(action))
+        tree.bind("<Button-3>", self._settings_capture_menu)
+        tree.bind("<Shift-F10>", self._settings_capture_menu)
+        self._add_tooltip(tree, "Right-click a capture, or press Shift+F10, for settings actions.")
 
         detail = ttk.LabelFrame(frame, text="Selected Capture")
         detail.grid(row=1, column=0, sticky="ew", padx=4, pady=(0, 4))
@@ -4857,7 +4885,7 @@ class MEPGui:
             def _selector_cb(device=device, name=reg["name"], key=key):
                 if self._afe_updating:
                     return
-                self.mep.afe.set_register(device, name, self._afe_choice_to_raw(reg, self._vars[key].get()))
+                self._settings_set_afe(device, name, self._afe_choice_to_raw(reg, self._vars[key].get()))
 
             self._vars[key].trace_add("write", lambda *_, cb=_selector_cb: cb())
             ttk.Radiobutton(
@@ -4882,7 +4910,7 @@ class MEPGui:
             if self._afe_updating:
                 return
             v = self._vars[key].get()
-            self.mep.afe.set_register(device, name, self._afe_checked_to_raw(reg, v))
+            self._settings_set_afe(device, name, self._afe_checked_to_raw(reg, v))
 
         self._vars[key].trace_add("write", lambda *_, cb=_check_cb: cb())
         ttk.Checkbutton(parent, text=label, variable=self._vars[key]).grid(
@@ -5568,6 +5596,9 @@ class MEPGui:
                     if isinstance(raw_val, dict):
                         raw_val = raw_val.get("value")
 
+                    if self._settings_afe_pending is not None:
+                        raw_val = self._settings_afe_pending.get(device, {}).get(name, raw_val)
+
                     if raw_val is None or key not in self._vars:
                         continue
 
@@ -5589,10 +5620,12 @@ class MEPGui:
                 self._afe_update_atten_ui_state(device, confirmed=confirmed)
         finally:
             self._afe_updating = False
+        self._settings_render_afe()
         logging.debug("AFE widgets updated from MQTT register data")
 
     def _afe_reset_defaults(self):
         """Restore all AFE widget vars to defaults from cached announce data."""
+        self._settings_finish_afe_staging()
         reg_pins = getattr(self, "_afe_reg_pins", None)
         if not reg_pins:
             logging.warning("AFE: cannot reset — no announce data")
@@ -7279,6 +7312,9 @@ class MEPGui:
         self._rec_presets_loaded = True
         current = self._vars["sample_rate_mhz"].get()
         self._sample_rate_combo.configure(values=values)
+        if self._settings_document is not None and self._rec_pending_overrides:
+            # A delayed discovery response must not replace a loaded recipe.
+            return
         self._rec_trace_busy = True
         try:
             self._vars["sample_rate_mhz"].set(current if current in values else values[0])
@@ -7336,6 +7372,9 @@ class MEPGui:
     def _rec_preview_draft(self, *_):
         if getattr(self, "_rec_trace_busy", False):
             return
+        if self._settings_document is not None:
+            self._rec_preview_capture_draft()
+            return
         self._rec_preview_request_seq += 1
         request_seq = self._rec_preview_request_seq
         self.capture_orchestrator.preview_recorder_settings(
@@ -7352,6 +7391,9 @@ class MEPGui:
         self._rec_render_model(self._rec_response_model(response))
 
     def _stage_rec_settings(self):
+        if self._settings_document is not None:
+            self._rec_preview_capture_draft(stage=True)
+            return
         self._rec_preview_request_seq += 1
         request_seq = self._rec_preview_request_seq
         self._rec_stage_button.configure(state="disabled")
@@ -7381,6 +7423,34 @@ class MEPGui:
         self._rec_pending_overrides = dict(model["overrides"])
         self._rec_render_model(model)
         logging.info("REC: settings will apply on next recorder start")
+
+    def _rec_preview_capture_draft(self, stage=False):
+        # Resolve against the loaded processing chain, not an unmodified preset.
+        try:
+            document = self._settings_collect_document()
+            draft = self._rec_collect_draft()
+        except (TypeError, ValueError, OverflowError) as error:
+            self._vars["rec_draft_error"].set(f"Fix input: {error}")
+            return
+        self._rec_preview_request_seq += 1
+        sequence = self._rec_preview_request_seq
+        self.capture_orchestrator.resolve_settings(
+            document, recorder_draft=draft,
+            callback=lambda response: self._gui_call(self._rec_capture_draft_resolved, sequence, stage, response),
+        )
+
+    def _rec_capture_draft_resolved(self, sequence, stage, response):
+        if sequence != self._rec_preview_request_seq:
+            return
+        resolved = response.get("status_data") or {}
+        if not response.get("success"):
+            self._vars["rec_draft_error"].set(response.get("error") or "Invalid settings")
+            self._rec_stage_button.configure(state="disabled")
+            return
+        if stage:
+            self._rec_pending_overrides = dict(resolved["recorder_overrides"])
+            logging.info("REC: settings will apply on next recorder start")
+        self._rec_render_model(resolved["recorder_model"])
 
     def _rec_reset_config(self):
         self._rec_pending_overrides.clear()
@@ -7486,6 +7556,286 @@ class MEPGui:
             self.root.after(50, self._pump_text_log)
         except tk.TclError:
             pass
+
+    # ============================= #
+    #       CAPTURE SETTINGS        #
+    # ============================= #
+
+    def _settings_load(self):
+        path = filedialog.askopenfilename(title="Load Capture Settings", filetypes=[("JSON settings", "*.json")])
+        if not path:
+            return
+        try:
+            document = json.loads(Path(path).read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError) as error:
+            messagebox.showerror("Capture Settings", str(error))
+            return
+        self._settings_resolve(document, "load")
+
+    def _settings_capture_menu(self, event):
+        tree = self._cap_tree
+        if getattr(event, "num", None) == 3:
+            row = tree.identify_row(event.y)
+            if not row:
+                return
+            tree.selection_set(row)
+            self._cap_selection_changed()
+        if not tree.selection():
+            return
+        try:
+            self._cap_settings_menu.tk_popup(event.x_root or tree.winfo_rootx() + 20, event.y_root or tree.winfo_rooty() + 30)
+        finally:
+            self._cap_settings_menu.grab_release()
+        return "break"
+
+    def _settings_from_capture(self, action):
+        capture, _upload = self._cap_selection()
+        if not capture:
+            return
+        document = capture.get("settings")
+        if not isinstance(document, dict) or not document:
+            messagebox.showinfo("Capture Settings", "This capture has no saved settings document.")
+            return
+        if action == "use":
+            self._settings_resolve(document, "load")
+        elif action == "export":
+            self._settings_write(document)
+        else:
+            window = tk.Toplevel(self.root)
+            window.title(f"Capture Settings — {capture['name']}")
+            window.geometry("760x600")
+            text = scrolledtext.ScrolledText(window, wrap="none", font=("TkFixedFont", 10))
+            text.pack(fill="both", expand=True, padx=8, pady=8)
+            text.insert("1.0", json.dumps(document, indent=2, allow_nan=False))
+            text.configure(state="disabled")
+            self._bind_copy_menu(text)
+
+    def _settings_collect_afe(self, channel):
+        pending = {}
+        if self._settings_afe_pending is not None:
+            expected = "rx" + channel.lower()
+            pending = deepcopy(self._settings_afe_pending)
+            if expected not in pending:
+                # Changing RX channel carries the selected path's staged choices.
+                previous = next((key for key in pending if key != "misc"), None)
+                if previous is not None:
+                    pending[expected] = pending.pop(previous)
+        registers = self.mep.afe.get_register_status()
+        named = registers.get("registers_named", {})
+        device = "rx" + channel.lower()
+        afe = {}
+        for group in ("misc", device):
+            values = {}
+            supported = (
+                ("TRIG_RX_SRC_SEL", "EXT_RX_TRIG_ENABLE", "EXT_BIAS_ENABLE", "PPS_SOURCE_SEL", "REF_SOURCE_SEL", "GNSS_ANT_SEL")
+                if group == "misc" else ("CHAN_BIAS_EN", "INT_RF_TRIG_SEL", "FILTER_BYPASS_SEL", "AMP_BYPASS_SEL")
+            )
+            for key in supported:
+                entry = named.get(group, {}).get(key)
+                value = entry.get("value") if isinstance(entry, dict) else entry
+                var = self._vars.get(f"afe_{group}_{key}")
+                definition = next((reg for reg in getattr(self, "_afe_reg_pins", {}).get(group, []) if reg["name"] == key), None)
+                known = value is not None or (group, key) in self._settings_afe_edited
+                if known and var is not None and definition is not None:
+                    value = self._afe_choice_to_raw(definition, var.get()) if self._afe_enabled_bit(definition) is None else self._afe_checked_to_raw(definition, var.get())
+                if value is not None:
+                    values[key] = value
+            if group == device:
+                var = self._vars.get(f"afe_{device}_atten_requested")
+                value = registers.get("attenuation_db", {}).get(device)
+                known = value is not None or (device, "attenuation_db") in self._settings_afe_edited
+                if known and var is not None:
+                    value = int(var.get())
+                if value is not None:
+                    values["attenuation_db"] = value
+            if values:
+                afe[group] = values
+        for group, values in pending.items():
+            afe.setdefault(group, {}).update(values)
+        return afe
+
+    def _settings_channel_changed(self, *_):
+        if self._settings_afe_pending is None or getattr(self, "_rec_trace_busy", False):
+            return
+        self._settings_afe_pending = self._settings_collect_afe(self._vars["channel"].get())
+        self._settings_render_afe()
+
+    def _settings_collect_document(self, params=None, sweep=None):
+        if sweep is None:
+            sweep = bool(self._vars["end_enabled"].get() and self._vars["step_enabled"].get())
+        if params is None:
+            params = self._parse_sweep_params() if sweep else self._parse_single_params()
+        acquisition = {"mode": "sweep" if sweep else "single", "frequency_hz": int(params["freq_start"] * 1e6), "duration_s": None if sweep else params["dwell"]}
+        if sweep:
+            acquisition["sweep"] = {"end_frequency_hz": int(params["freq_end"] * 1e6), "step_hz": int(params["step"] * 1e6), "dwell_s": params["dwell"]}
+        document = {key: self._settings_document[key] for key in ("name", "description") if self._settings_document and key in self._settings_document}
+        document.update(format_version=1, settings={
+            "acquisition": acquisition,
+            "receive": {
+                "channel": params["channel"], "sample_rate_hz": params["sample_rate_mhz"] * 1000000,
+                "conjugate": self._vars["conjugate_policy"].get() or CONJUGATE_POLICY_DEFAULT,
+                "external_tuner": {"enabled": params["tuner_enabled"], "adc_if_mhz": params["adc_if_mhz"], "injection": params["injection"] if params["tuner_enabled"] else None},
+            },
+            "recorder": {"overrides": dict(self._rec_pending_overrides)},
+            "afe": self._settings_collect_afe(params["channel"]),
+        })
+        return document
+
+    def _settings_save(self):
+        try:
+            document = self._settings_collect_document()
+            draft = self._rec_collect_draft() if "REC" in self._tabs_built else None
+        except (TypeError, ValueError, OverflowError) as error:
+            messagebox.showerror("Capture Settings", str(error))
+            return
+        self._settings_resolve(document, "save", draft)
+
+    def _settings_resolve(self, document, action, draft=None):
+        afe_defaults = None
+        if action == "load" and isinstance(document, dict):
+            # New recipes and existing capture documents use different channel
+            # field names. Their actual conversion remains in the orchestrator.
+            settings = document.get("settings", document.get("effective", document.get("input", {})))
+            receive = settings.get("receive", {}) if isinstance(settings, dict) else None
+            if isinstance(receive, dict):
+                channel_key = "channel" if "settings" in document else "rfsoc_channel"
+                channel = receive.get(channel_key, "A")
+                if channel in CHANNEL_OPTIONS:
+                    try:
+                        afe_defaults = self._settings_collect_afe(channel)
+                    except (TypeError, ValueError, OverflowError) as error:
+                        messagebox.showerror("Capture Settings", str(error))
+                        return
+        # Preserve which AFE choices are actually known. Service defaults fill
+        # acquisition requests, but must not masquerade as observed GUI values.
+        afe_choices = None
+        if action == "load":
+            afe_choices = deepcopy(afe_defaults or {})
+            settings = document.get("settings", {}) if isinstance(document, dict) else {}
+            supplied = settings.get("afe", {}) if isinstance(settings, dict) else {}
+            if isinstance(supplied, dict):
+                for group, values in supplied.items():
+                    if isinstance(values, dict):
+                        afe_choices.setdefault(group, {}).update(values)
+        elif action == "save":
+            afe_choices = deepcopy(document["settings"].get("afe", {}))
+        self._settings_request_seq += 1
+        sequence = self._settings_request_seq
+
+        def complete(response):
+            self._gui_call(self._settings_resolved, sequence, action, response, afe_choices)
+
+        request = self.capture_orchestrator.resolve_settings(document, callback=complete, recorder_draft=draft, afe_defaults=afe_defaults)
+        if not request.get("sent"):
+            messagebox.showerror("Capture Settings", "Settings resolution needs a connection to MQTT and a running CaptureOrchestrator. The request could not be sent. No file was saved and controls were not changed.")
+        else:
+            self.root.after(10000, self._settings_timeout, sequence)
+
+    def _settings_timeout(self, sequence):
+        if sequence == self._settings_request_seq:
+            self._settings_request_seq += 1
+            messagebox.showerror("Capture Settings", "No settings response from CaptureOrchestrator. Check that it is running and connected to MQTT. No file was saved and controls were not changed.")
+
+    def _settings_resolved(self, sequence, action, response, afe_choices=None):
+        if sequence != self._settings_request_seq:
+            return
+        self._settings_request_seq += 1
+        model = response.get("status_data") or {}
+        if not response.get("success") or not isinstance(model.get("document"), dict):
+            messagebox.showerror("Capture Settings", response.get("error") or "Invalid capture document")
+            return
+        document = deepcopy(model["document"])
+        if afe_choices is not None:
+            resolved_afe = document["settings"]["afe"]
+            document["settings"]["afe"] = {
+                group: {key: resolved_afe[group][key] for key in values}
+                for group, values in afe_choices.items() if values
+            }
+        if action == "save":
+            if not document["settings"].get("afe"):
+                document["settings"].pop("afe", None)
+            self._settings_write(document)
+            return
+        settings = document["settings"]
+        acquisition, receive = settings["acquisition"], settings["receive"]
+        sweep = acquisition.get("sweep", {})
+        tuner = receive["external_tuner"]
+        # Build advanced controls before assigning values; all changes below stage
+        # configuration only. AFE traces are explicitly suppressed.
+        self._ensure_tab_built("REC")
+        self._settings_document = document
+        self._settings_afe_pending = deepcopy(settings["afe"])
+        self._conjugate_policy_user_override = True
+        controls = {
+            "freq_start": acquisition["frequency_hz"] / 1e6,
+            "freq_end": sweep.get("end_frequency_hz", acquisition["frequency_hz"]) / 1e6,
+            "step": sweep.get("step_hz", 1000000) / 1e6,
+            "dwell": sweep.get("dwell_s", acquisition["duration_s"]) or "",
+            "channel": receive["channel"], "sample_rate_mhz": receive["sample_rate_hz"] // 1000000,
+            "conjugate_policy": receive["conjugate"],
+            "tuner_selection": (getattr(self, "_advertised_tuner", None) or "Enabled") if tuner["enabled"] else "Disabled",
+            "adc_if_mhz": tuner["adc_if_mhz"] if tuner["enabled"] else "",
+            "injection_mode": (tuner["injection"] or "high").title(),
+        }
+        # Prevent the sample-rate trace from replacing the loaded REC draft.
+        self._rec_trace_busy = True
+        try:
+            for key, value in controls.items():
+                self._vars[key].set(str(value))
+        finally:
+            self._rec_trace_busy = False
+        self._set_rx_sweep_enabled(acquisition["mode"] == "sweep")
+        self._set_rx_dwell_enabled(acquisition["mode"] == "sweep" or acquisition["duration_s"] is not None)
+        self._rec_preview_request_seq += 1
+        self._rec_pending_overrides = dict(model["recorder_overrides"])
+        self._rec_render_model(model["recorder_model"], load_values=True)
+        self._settings_render_afe()
+        self._status_var.set("Settings loaded; review before Start.")
+
+    def _settings_write(self, document):
+        path = filedialog.asksaveasfilename(title="Export Capture Settings", initialfile="capture_settings.json", defaultextension=".json", filetypes=[("JSON settings", "*.json")])
+        if not path:
+            return
+        target = Path(path)
+        # Load/Save must never overwrite a capture's historical metadata file.
+        if target.name == "capture_settings.json" and target.parent.name == "data" and target.exists():
+            messagebox.showerror("Capture Settings", "Choose another location; this is an existing capture record.")
+            return
+        try:
+            target.write_text(json.dumps(document, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+        except (OSError, TypeError, ValueError) as error:
+            messagebox.showerror("Capture Settings", str(error))
+
+    def _settings_set_afe(self, device, register, value):
+        self._settings_afe_edited.add((device, register))
+        if self._settings_afe_pending is not None and register in self._settings_afe_pending.get(device, {}):
+            self._settings_afe_pending[device][register] = value
+        else:
+            self.mep.afe.set_register(device, register, value)
+
+    def _settings_render_afe(self):
+        if self._settings_afe_pending is None:
+            return
+        self._afe_updating = True
+        try:
+            for device, values in self._settings_afe_pending.items():
+                for reg in getattr(self, "_afe_reg_pins", {}).get(device, []):
+                    if reg["name"] in values:
+                        self._afe_set_control_var_from_raw(f"afe_{device}_{reg['name']}", reg, values[reg["name"]])
+                key = f"afe_{device}_atten_requested"
+                if "attenuation_db" in values and key in self._vars:
+                    self._vars[key].set(str(values["attenuation_db"]))
+                    self._afe_atten_initialized.add(device)
+                    self._vars[f"afe_{device}_atten_state"].set("")
+        finally:
+            self._afe_updating = False
+
+    def _settings_finish_afe_staging(self):
+        for device, values in (self._settings_afe_pending or {}).items():
+            self._settings_afe_edited.update((device, key) for key in values)
+            self._afe_atten_initialized.discard(device)
+        self._settings_afe_pending = None
+        self._settings_button.configure(text="Settings")
 
     # ============================= #
     #       PARAMETER PARSING       #
@@ -7634,6 +7984,9 @@ class MEPGui:
             logging.error(f"Parameter error: {e}")
             return
         self._status_var.set("Requesting RX sweep...")
+        if self._settings_document is not None:
+            self._settings_start(params, sweep=True)
+            return
         self.capture_orchestrator.start_rx(
             settings=settings,
             callback=lambda response: self._gui_call(self._handle_workflow_response, "RX", response),
@@ -7647,11 +8000,32 @@ class MEPGui:
             logging.error(f"Parameter error: {e}")
             return
         self._status_var.set("Requesting RX capture...")
+        if self._settings_document is not None:
+            self._settings_start(params, sweep=False)
+            return
         self.capture_orchestrator.start_rx(
             settings=settings,
             dwell_s=params["dwell"],
             callback=lambda response: self._gui_call(self._handle_workflow_response, "RX", response),
         )
+
+    def _settings_start(self, params, sweep):
+        try:
+            document = self._settings_collect_document(params, sweep)
+        except (TypeError, ValueError, OverflowError) as error:
+            messagebox.showerror("Capture Settings", str(error))
+            return
+        pending = self._settings_afe_pending
+        submitted = deepcopy(pending)
+        self.capture_orchestrator.start_document(document, params["capture_name"], callback=lambda response: self._gui_call(self._settings_started, response, pending, submitted))
+
+    def _settings_started(self, response, pending, submitted):
+        self._handle_workflow_response("RX", response)
+        state = (response.get("status_data") or {}).get("state")
+        if response.get("success") and state not in ("failed", "error"):
+            # Preserve a newer Load or edits made while Start was awaiting its response.
+            if self._settings_afe_pending is pending and pending == submitted:
+                self._settings_finish_afe_staging()
 
     def _stop_all(self):
         self._status_var.set("Requesting stop...")

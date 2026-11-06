@@ -13,3 +13,15 @@
       path: /usr/local/bin/mep
       force: true
 
+  - name: Make capture command executable
+    ansible.builtin.file:
+      path: /opt/ansible/mep-services/MEPCli/mep_cli.py
+      mode: '0755'
+
+  - name: Link mep_capture command
+    ansible.builtin.file:
+      state: link
+      src: /opt/ansible/mep-services/MEPCli/mep_cli.py
+      path: /usr/local/bin/mep_capture
+      force: true
+

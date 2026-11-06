@@ -21,6 +21,7 @@ data through `mep_client` and publishes it to RadioHound.
 | TunerControl | `TunerControl/tuner_control.py` | `tuner-control.service` | `tunercontrol/` |
 | RadioHoundGateway | `RadiohoundGateway/radiohound_gateway.py` | `radiohound-gateway.service` | Remote `radiohound/clients/announce/` and `radiohound/clients/data/` |
 | MEPGui | `MEPGui/mep_gui.py` | none | MQTT client only |
+| MEPCli | `MEPCli/mep_cli.py` | none | MQTT client only |
 
 The service source is installed at `/opt/ansible/mep-services`. Service units
 and executable Python entrypoints use `/opt/radiohound/python313/bin/python`.
@@ -66,6 +67,33 @@ API. It accepts no remote acquisition commands, and other local services do not
 depend on it. Gateway or remote-connection failures do not stop local MEP
 operation. Its unit is discovered by the same lifecycle scripts as the other
 services.
+
+## Capture settings and applications
+
+`mep` opens MEPGui. The RX **Settings** menu loads or saves a capture recipe
+without starting equipment. Press **Start/Update** to apply loaded settings.
+In CAP, right-click a capture (or press Shift+F10) to use, inspect, or export
+its settings.
+
+Load/Save resolution requires MQTT, CaptureOrchestrator, and its Recorder preset
+files. It does not configure equipment.
+
+[MEPCli](MEPCli/README.md) provides the command-line application:
+
+```bash
+mep_capture experiment.json --capture-name trial-01
+```
+
+The direct command link is installed by `mep-services.yml`; restarting services
+alone does not install it. `mep` retains its existing GUI link. MEPCli has
+no service unit and is not started by the lifecycle scripts.
+
+Both applications use the same public CaptureOrchestrator document interface.
+A JSON input can contain only selected `settings`; saved captures contain the
+expanded recipe and a descriptive `record` in `data/capture_settings.json`.
+Only `settings` is executable. Configuration snapshots and observations in
+`record` are not restored as commands. Existing capture JSON remains readable.
+See [CaptureOrchestrator](CaptureOrchestrator/README.md) for defaults and fields.
 
 ## External dependencies
 

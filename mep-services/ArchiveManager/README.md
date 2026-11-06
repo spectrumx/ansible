@@ -4,6 +4,12 @@ ArchiveManager independently inventories and manages local capture directories u
 
 Each directory name is the capture's local identifier. ArchiveManager reads portable settings from `data/capture_settings.json` and reports file counts, sizes, timestamps, settings, and filesystem issues.
 
+The document is exposed unchanged. New documents contain reusable `settings`
+and a descriptive `record`; older `input`/`effective` documents remain readable.
+ArchiveManager does not interpret these sections as device commands or rewrite
+historical files. MEPGui and MEPCli use CaptureOrchestrator's public
+document resolver when importing settings.
+
 ## Commands
 
 ```text

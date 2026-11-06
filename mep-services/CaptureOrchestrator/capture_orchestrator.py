@@ -8,6 +8,7 @@
 import csv
 import json
 import logging
+import math
 import os
 import re
 import shutil
@@ -21,6 +22,11 @@ from typing import Optional
 
 import paho.mqtt.client as mqtt
 import yaml
+
+from capture_settings import (
+    CHANNEL_DEVICES, MISC_DEFAULTS, RX_DEFAULTS, afe_register_commands,
+    legacy_document, recorder_settings, resolve_document, rx_arguments,
+)
 
 
 # ============================= #
@@ -58,6 +64,8 @@ AFE_IMU = "afecontrol/data/imu"
 AFE_MAG = "afecontrol/data/mag"
 AFE_HK = "afecontrol/data/hk"
 AFE_REGISTERS = "afecontrol/status/registers"
+AFE_COMMAND = "afecontrol/command/registers"
+HOST_STATUS = "hostmanager/status"
 
 CHANNEL_PORTS = {"A": 60134, "B": 60133, "C": 60132, "D": 60131}
 TX_CHANNELS = {"None", "A", "B", "A,B"}
@@ -80,6 +88,15 @@ LEGACY_CONFIG_TYPE = "capture_orchestrator_config"
 # ============================= #
 
 COMMAND_DESCRIPTIONS = {
+    "resolve_settings": {
+        "description": "Resolve a capture document without changing staged settings or hardware.",
+        "arguments": {
+            "document": {"type": "object", "required": True},
+            "recorder_draft": {"type": "object", "optional": True},
+            "afe_defaults": {"type": "object", "optional": True, "description": "AFE baseline for omitted file fields, such as current GUI choices."},
+            "settings_overrides": {"type": "object", "optional": True, "description": "Explicit settings applied over the document before resolution."},
+        },
+    },
     "get_status": {"description": "Return current acquisition workflow state.", "arguments": {}},
     "get_config": {"description": "Return the staged workflow configuration.", "arguments": {}},
     "load_config": {"description": "Load a capture settings document from JSON or YAML.", "arguments": {"path": {"type": "string", "required": True}}},
@@ -99,6 +116,7 @@ COMMAND_DESCRIPTIONS = {
     "start_rx": {
         "description": "Start one RX capture or an RX frequency sweep.",
         "arguments": {
+            "document": {"type": "object", "optional": True},
             "settings": {"type": "object", "optional": True},
             "freq_start_hz": {"type": "number", "optional": True},
             "freq_end_hz": {"type": "number", "optional": True},
@@ -495,6 +513,8 @@ class ConfigManager:
         loaded = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
         if not isinstance(loaded, dict):
             raise ValueError("configuration must be a YAML mapping")
+        if "settings" in loaded:
+            raise ValueError("Use resolve_settings or start_rx with document for portable capture settings; load_config manages legacy staged configuration")
         document = loaded.get("document", {})
         if document.get("type") == LEGACY_CONFIG_TYPE:
             supplied_input, _ = self._legacy_rx_input(loaded.get("rx", {}))
@@ -925,6 +945,19 @@ class WorkflowState:
 #       RECORDER COMMANDS       #
 # ============================= #
 
+def recorder_config_overrides(settings):
+    """One ordered override list for both Recorder commands and its saved snapshot."""
+    channel = settings["channel"]
+    folder = settings.get("capture_name") or "preview"
+    return [
+        ("basic_network.dst_port", str(CHANNEL_PORTS[channel])),
+        ("drf_sink.channel_dir", f"{folder}/data/ch{channel}"),
+        ("spectrogram_output.plot_subdir", f"{folder}/data/ch{channel}_spectrogram_images"),
+        *settings.get("recorder_overrides", {}).items(),
+        ("packet.apply_conjugate", settings["apply_conjugate"]),
+    ]
+
+
 class Recorder:
     """Configure and control RecorderControl as one workflow component."""
 
@@ -933,13 +966,13 @@ class Recorder:
 
     def configure(self, settings, session_id=None):
         sample_rate_mhz = int(settings["sample_rate_mhz"])
-        channel = settings["channel"]
         capture_name = settings.get("capture_name")
-        capture_folder = capture_name or "preview"
 
         self.stop(session_id)
         self.mqtt.command(RECORDER_COMMAND, "config.load", {"name": f"sr{sample_rate_mhz}MHz"}, session_id)
-        self.mqtt.command(RECORDER_COMMAND, "config.set", {"key": "basic_network.dst_port", "value": str(CHANNEL_PORTS[channel])}, session_id)
+        overrides = recorder_config_overrides(settings)
+        key, value = overrides[0]
+        self.mqtt.command(RECORDER_COMMAND, "config.set", {"key": key, "value": value}, session_id)
 
         if not capture_name:
             stale_dir = PREVIEW_DATA_DIR.with_name(
@@ -952,16 +985,8 @@ class Recorder:
             if stale_dir.is_dir():
                 shutil.rmtree(stale_dir, ignore_errors=True)
 
-        self.mqtt.command(RECORDER_COMMAND, "config.set", {"key": "drf_sink.channel_dir", "value": f"{capture_folder}/data/ch{channel}"}, session_id)
-        self.mqtt.command(RECORDER_COMMAND, "config.set", {"key": "spectrogram_output.plot_subdir", "value": f"{capture_folder}/data/ch{channel}_spectrogram_images"}, session_id)
-        for key, value in settings.get("recorder_overrides", {}).items():
+        for key, value in overrides[1:]:
             self.mqtt.command(RECORDER_COMMAND, "config.set", {"key": key, "value": value}, session_id)
-        self.mqtt.command(
-            RECORDER_COMMAND,
-            "config.set",
-            {"key": "packet.apply_conjugate", "value": settings["apply_conjugate"]},
-            session_id,
-        )
 
     def start(self, session_id=None):
         self.mqtt.command(RECORDER_COMMAND, "enable", session_id=session_id)
@@ -984,6 +1009,7 @@ class Rx:
         self.statuses = statuses
         self.state = state
         self._stop_requested = threading.Event()
+        self._duration_timer = None
         self._sweep_thread = None
         self._sweep_lock = threading.Lock()
         self.recorder = Recorder(mqtt_client)
@@ -999,20 +1025,31 @@ class Rx:
     def start_single(self, frequency_hz, dwell=None, config=None, session_id=None):
         config = dict(config or {})
         self._validate_config(config)
+        if dwell is not None:
+            dwell = float(dwell)
+            if not math.isfinite(dwell) or dwell <= 0:
+                raise ValueError("dwell must be positive and finite")
+        self._cancel_duration(wait=True)
         self._stop_requested.clear()
+        # Publish the timer reference before configuration so Stop can cancel it
+        # even while the controller commands are still being sent.
+        timer = threading.Timer(dwell, self._finish_single, args=(session_id,)) if dwell is not None else None
+        self._duration_timer = timer
+        if timer is not None:
+            timer.daemon = True
         self._set_starting_state("start_rx", session_id, frequency_hz, settings=config)
         try:
             self.recorder.configure(config, session_id)
             self._configure_rx_frequency(frequency_hz, config, session_id)
             self.recorder.start(session_id)
             self._start_telemetry(config.get("capture_dir"))
+            if self._stop_requested.is_set():
+                return self.stop(session_id)
             self.state.set(state="running")
-            if dwell is not None:
-                dwell = float(dwell)
-                if dwell <= 0:
-                    raise ValueError("dwell must be positive")
-                self._dwell(dwell)
-                self.stop(session_id)
+            if timer is not None:
+                timer.start()
+            if self._stop_requested.is_set():
+                return self.stop(session_id)
             return {"state": self.state.get()["state"], "frequency_hz": frequency_hz, "capture_name": config.get("capture_name")}
         except Exception as exc:
             try:
@@ -1033,6 +1070,7 @@ class Rx:
         with self._sweep_lock:
             if self._sweep_thread is not None and self._sweep_thread.is_alive():
                 raise RuntimeError("an RX sweep is already running")
+            self._cancel_duration(wait=True)
             self._stop_requested.clear()
             self._sweep_thread = threading.Thread(
                 target=self._run_sweep,
@@ -1067,6 +1105,7 @@ class Rx:
             self.state.set(state="failed", error=str(exc))
 
     def stop(self, session_id=None):
+        self._cancel_duration()
         self._stop_requested.set()
         self.telemetry.stop()
         try:
@@ -1084,6 +1123,11 @@ class Rx:
 
         # Reset RFSoC before changing channel or frequency.
         self.mqtt.command(RFSOC_COMMAND, "reset", session_id=session_id)
+
+        # File-driven RX settings use AFEControl's existing multi-device command.
+        # No readback barrier or dependency on the submitting application is added.
+        if settings.get("afe_commands"):
+            self.mqtt.command(AFE_COMMAND, "set_registers", settings["afe_commands"], session_id)
 
         # Select the channel before writing frequency fields.
         self.mqtt.command(RFSOC_COMMAND, "set", f"channel {settings['channel']}", session_id)
@@ -1117,12 +1161,21 @@ class Rx:
             logging.exception("Capture telemetry setup failed; RX capture will continue")
             self.telemetry.stop()
 
-    def _dwell(self, seconds):
-        deadline = time.monotonic() + seconds
-        while time.monotonic() < deadline:
-            if self._stop_requested.is_set():
-                return
-            time.sleep(min(1.0, deadline - time.monotonic()))
+    def _cancel_duration(self, wait=False):
+        timer = self._duration_timer
+        if timer is not None:
+            timer.cancel()
+            # A completed timer may already be stopping RX. Finish that stop
+            # before a subsequent Start configures the next capture.
+            if wait and timer.ident is not None and timer is not threading.current_thread():
+                timer.join()
+
+    def _finish_single(self, session_id):
+        try:
+            self.stop(session_id)
+        except Exception as error:
+            logging.exception("Timed RX stop failed")
+            self.state.set(state="failed", error=str(error))
 
     def _set_starting_state(self, operation, session_id, frequency_hz, step_count=None, settings=None):
         self.state.set(
@@ -1239,9 +1292,83 @@ class CaptureOrchestrator:
         self.rx = Rx(mqtt_client, statuses, self.rx_state)
         self.tx = Tx(mqtt_client, self.tx_state)
 
-    def _prepare_capture(self, resolved_rx: dict) -> dict:
+    def resolve_settings(self, document, afe_defaults=None):
+        # Stateless: preview never alters ConfigManager's staged input or hardware.
+        model = resolve_document(document, resolve_recorder_preset, afe_defaults)
+        recorder_draft_to_overrides(model["recorder_model"]["values"])
+        return model
+
+    def _document_rx(self, arguments):
+        model = self.resolve_settings(arguments["document"])
+        request = rx_arguments(model["document"], model["recorder_overrides"])
+        request["settings"]["capture"] = {"name": arguments.get("capture_name")}
+        resolved = ConfigManager().resolve_rx(request)
+        resolved["capture_settings"] = model["document"]
+        resolved["afe_commands"] = afe_register_commands(model["document"]["settings"]["afe"])
+        return resolved, model["recorder_model"]
+
+    def _current_afe_settings(self, channel):
+        """Use available readback when documenting an existing GUI/API request."""
+        status = self.statuses.latest(AFE_REGISTERS) or {}
+        registers = status.get("registers_named", {})
+        device = CHANNEL_DEVICES[channel]
+        selected = {"misc": dict(MISC_DEFAULTS), device: dict(RX_DEFAULTS)}
+        for group, values in selected.items():
+            for key in values:
+                if key == "attenuation_db":
+                    value = status.get("attenuation_db", {}).get(group)
+                else:
+                    entry = registers.get(group, {}).get(key)
+                    value = entry.get("value") if isinstance(entry, dict) else entry
+                if value is not None:
+                    values[key] = value
+        return selected
+
+    def _capture_document(self, resolved, recorder_model):
+        saved = resolved["capture_settings"]
+        if "settings" not in saved:
+            saved = legacy_document(saved)
+            saved["settings"]["afe"] = self._current_afe_settings(resolved["channel"])
+            saved["settings"]["recorder"] = recorder_settings(recorder_model, resolved.get("recorder_overrides", {}))
+        config = deepcopy(recorder_model["config"])
+        for key, value in recorder_config_overrides(resolved):
+            _set_dotted_value(config, key, value)
+        host = self.statuses.latest(HOST_STATUS) or {}
+        network = host.get("network", {})
+        saved["record"] = {
+            "capture_name": resolved.get("capture_name"),
+            "host": {
+                "identity": host.get("identity"),
+                "interfaces": [{"name": item.get("name"), "mac": item.get("mac")} for item in network.get("interfaces", [])],
+            },
+            "resolved": {
+                "channel": resolved["channel"],
+                "frequency_hz": resolved["freq_start_hz"],
+                "recorder_preset": recorder_model["preset_name"],
+                "recorder_input_sample_rate_hz": recorder_model["metrics"]["input_sample_rate_hz"],
+                "recorded_sample_rate_hz": recorder_model["metrics"]["effective_sample_rate_hz"],
+                "apply_conjugate": resolved["apply_conjugate"],
+                "external_tuner_model": self._resolved_tuner_model(self.statuses.latest(TUNER_STATUS)) if resolved["external_tuner_enabled"] else None,
+            },
+            "recorder_config": config,
+            "afe_registers": deepcopy(self.statuses.latest(AFE_REGISTERS)),
+            "afe_registers_source": "last_reported_before_configuration",
+        }
+        resolved["capture_settings"] = saved
+
+    def _compatible_document(self, existing, incoming):
+        previous = self.resolve_settings(existing)["document"]["settings"]
+        current = deepcopy(incoming["settings"])
+        if "settings" not in existing:
+            # Old files never recorded the AFE state; do not invent a comparison.
+            previous.pop("afe", None)
+            current.pop("afe", None)
+        return previous == current
+
+    def _prepare_capture(self, resolved_rx: dict, recorder_model: dict) -> dict:
         self._resolve_external_tuner(resolved_rx)
         self._resolve_conjugate(resolved_rx)
+        self._capture_document(resolved_rx, recorder_model)
         capture_name = resolved_rx.get("capture_name")
         if not capture_name:
             return resolved_rx
@@ -1258,7 +1385,7 @@ class CaptureOrchestrator:
                 existing = json.loads(settings_path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
                 raise RuntimeError(f"invalid capture settings: {settings_path}") from exc
-            if existing.get("effective") != capture_settings["effective"]:
+            if not self._compatible_document(existing, capture_settings):
                 raise ValueError("capture settings differ; choose a new capture name")
         else:
             self._write_json(settings_path, capture_settings)
@@ -1273,12 +1400,12 @@ class CaptureOrchestrator:
         if resolved_model is None:
             return
         settings = resolved_rx["capture_settings"]
-        tuner = settings["effective"]["receive"]["external_tuner"]
-        tuner["resolved_model"] = resolved_model
-        settings["provenance"]["receive.external_tuner.resolved_model"] = {
-            "source": "service_resolved",
-            "service": "tunercontrol",
-        }
+        if "effective" in settings:
+            tuner = settings["effective"]["receive"]["external_tuner"]
+            tuner["resolved_model"] = resolved_model
+            settings["provenance"]["receive.external_tuner.resolved_model"] = {
+                "source": "service_resolved", "service": "tunercontrol",
+            }
 
     @staticmethod
     def _resolve_conjugate(resolved_rx: dict):
@@ -1294,11 +1421,11 @@ class CaptureOrchestrator:
             )
         resolved_rx["apply_conjugate"] = apply_conjugate
         settings = resolved_rx["capture_settings"]
-        settings["effective"]["receive"]["apply_conjugate"] = apply_conjugate
-        settings["provenance"]["receive.apply_conjugate"] = {
-            "source": "derived",
-            "rule": "conjugate-policy",
-        }
+        if "effective" in settings:
+            settings["effective"]["receive"]["apply_conjugate"] = apply_conjugate
+            settings["provenance"]["receive.apply_conjugate"] = {
+                "source": "derived", "rule": "conjugate-policy",
+            }
 
     @staticmethod
     def _resolved_tuner_model(status):
@@ -1333,6 +1460,24 @@ class CaptureOrchestrator:
             return {"rx": self.rx_state.get(), "tx": self.tx_state.get()}
         if task_name == "get_config":
             return self.config.get()
+        if task_name == "resolve_settings":
+            document = deepcopy(arguments["document"])
+            if "settings_overrides" in arguments:
+                overrides = arguments["settings_overrides"]
+                if not isinstance(document, dict) or not isinstance(overrides, dict):
+                    raise ValueError("document and settings_overrides must be objects")
+                descriptor = document.get("document")
+                if "settings" not in document and isinstance(descriptor, dict) and descriptor.get("type") == CONFIG_TYPE:
+                    document = legacy_document(document)
+                supplied = document.get("settings", {})
+                if not isinstance(supplied, dict):
+                    raise ValueError("settings must be an object")
+                document["settings"] = ConfigManager._merge(supplied, overrides)
+            if "recorder_draft" in arguments:
+                overrides = recorder_draft_to_overrides(arguments["recorder_draft"])
+                document.setdefault("settings", {}).setdefault("recorder", {}).setdefault("overrides", {}).update(overrides)
+            model = self.resolve_settings(document, afe_defaults=arguments.get("afe_defaults"))
+            return {"document": model["document"], "recorder_model": model["recorder_model"], "recorder_overrides": model["recorder_overrides"]}
         if task_name == "load_config":
             return self.config.load(arguments["path"])
         if task_name == "save_config":
@@ -1346,13 +1491,17 @@ class CaptureOrchestrator:
                 return resolve_recorder_preset(arguments["sample_rate_mhz"])
             return preview_recorder_settings(arguments["sample_rate_mhz"], arguments["draft"])
         if task_name == "start_rx":
-            resolved = self.config.resolve_rx(arguments)
-            recorder_model = resolve_recorder_preset(
-                resolved["sample_rate_mhz"], resolved["recorder_overrides"]
-            )
+            if "document" in arguments:
+                unknown = set(arguments) - {"document", "capture_name"}
+                if unknown:
+                    raise ValueError("Document requests accept only document and capture_name")
+                resolved, recorder_model = self._document_rx(arguments)
+            else:
+                resolved = self.config.resolve_rx(arguments)
+                recorder_model = resolve_recorder_preset(resolved["sample_rate_mhz"], resolved["recorder_overrides"])
             if not recorder_model.get("available"):
                 raise ValueError(recorder_model.get("error") or "Recorder preset is invalid")
-            resolved = self._prepare_capture(resolved)
+            resolved = self._prepare_capture(resolved, recorder_model)
             return self.rx.start(
                 freq_start=resolved.pop("freq_start_hz"),
                 freq_end=resolved.pop("freq_end_hz", None),
@@ -1413,6 +1562,7 @@ class CaptureOrchestratorService:
             RECORDER_STATUS,
             AFE_ANNOUNCE,
             AFE_REGISTERS,
+            HOST_STATUS,
             *self.orchestrator.rx.telemetry.active_topics(),
         )
         for topic in topics:
@@ -1426,6 +1576,7 @@ class CaptureOrchestratorService:
             RECORDER_STATUS,
             AFE_ANNOUNCE,
             AFE_REGISTERS,
+            HOST_STATUS,
             AFE_GNSS,
             AFE_IMU,
             AFE_MAG,

@@ -70,6 +70,21 @@ class CaptureClient(ComponentClient):
     def start_rx(self, callback=None, **arguments):
         return self.request("start_rx", arguments, callback=callback)
 
+    def resolve_settings(self, document, callback=None, recorder_draft=None, afe_defaults=None, settings_overrides=None):
+        """Preview without equipment changes; optional AFE defaults fill omitted file fields."""
+        arguments = {"document": document}
+        if recorder_draft is not None:
+            arguments["recorder_draft"] = recorder_draft
+        if afe_defaults is not None:
+            arguments["afe_defaults"] = afe_defaults
+        if settings_overrides is not None:
+            arguments["settings_overrides"] = settings_overrides
+        return self.request("resolve_settings", arguments, callback=callback)
+
+    def start_document(self, document, capture_name=None, callback=None):
+        """Run an RX recipe; the orchestrator owns all configuration and timing."""
+        return self.start_rx(document=document, capture_name=capture_name, callback=callback)
+
     def stop_rx(self, callback=None):
         return self.request("stop_rx", callback=callback)
 
