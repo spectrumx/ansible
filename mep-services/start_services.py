@@ -9,7 +9,7 @@ units = sorted(Path(__file__).parent.glob("*/*.service"), key=lambda path: path.
 
 for unit in units:
     print(f"Linking {unit.name}...", flush=True)
-    subprocess.run(["sudo", "systemctl", "link", "--force", str(unit.resolve())], check=True)
+    subprocess.run(["sudo", "systemctl", "enable", "--force", str(unit.resolve())], check=True)
 
 print("Reloading systemd...", flush=True)
 subprocess.run(["sudo", "systemctl", "daemon-reload"], check=True)
